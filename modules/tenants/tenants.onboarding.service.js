@@ -1,4 +1,5 @@
-const crypto = require("crypto");
+const crypto =
+  require("crypto");
 
 const authDb =
   require("../../db/authDb");
@@ -10,57 +11,79 @@ const usersService =
   require("cpmsoft-core/users/users.service");
 
 
-// ---------------------------------
+// =================================
 // HELPERS
-// ---------------------------------
+// =================================
+
 function requiredText(value) {
-  return String(value || "").trim();
+
+  return String(
+    value || ""
+  ).trim();
 }
 
 
 function optionalText(value) {
-  const text =
-    String(value || "").trim();
 
-  return text || null;
+  const result =
+    String(
+      value || ""
+    ).trim();
+
+  return result || null;
 }
 
 
-// ---------------------------------
-// ONBOARD NEW TENANT
-// ---------------------------------
-async function onboardTenant(data) {
+// =================================
+// ONBOARD TENANT
+// =================================
 
-  // ---------------------------------
-  // VALIDATE REQUEST
-  // ---------------------------------
-  if (!data) {
-    const error =
-      new Error("Request body is required.");
-
-    error.statusCode = 400;
-    error.code = "REQUEST_BODY_REQUIRED";
-
-    throw error;
-  }
-
+async function onboardTenant(
+  payload = {}
+) {
 
   const tenantData =
-    data.tenant || {};
+    payload.tenant || {};
 
   const primaryContact =
-    data.primaryContact || {};
+    payload.primaryContact || {};
 
+  const requestedPackageIds =
+    Array.isArray(payload.packageIds)
+      ? [
+        ...new Set(
+          payload.packageIds
+            .filter(Boolean)
+        )
+      ]
+      : [];
+
+  const requestedResourceIds =
+    Array.isArray(payload.resourceIds)
+      ? [
+        ...new Set(
+          payload.resourceIds
+            .filter(Boolean)
+        )
+      ]
+      : [];
+
+
+  // ---------------------------------
+  // VALIDATE TENANT
+  // ---------------------------------
 
   const legalName =
     requiredText(
       tenantData.legalName
     );
 
+
   if (!legalName) {
+
     const error =
       new Error(
-        "Company legal name is required."
+        "Legal Name is required."
       );
 
     error.statusCode = 400;
@@ -70,6 +93,34 @@ async function onboardTenant(data) {
     throw error;
   }
 
+
+  const licensedUsers =
+    Number(
+      tenantData.licensedUsers ?? 1
+    );
+
+
+  if (
+    !Number.isInteger(licensedUsers) ||
+    licensedUsers < 1
+  ) {
+
+    const error =
+      new Error(
+        "Licensed Users must be at least 1."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "INVALID_LICENSED_USERS";
+
+    throw error;
+  }
+
+
+  // ---------------------------------
+  // VALIDATE PRIMARY CONTACT
+  // ---------------------------------
 
   const firstName =
     requiredText(
@@ -87,36 +138,59 @@ async function onboardTenant(data) {
     ).toLowerCase();
 
 
-  if (
-    !firstName ||
-    !lastName ||
-    !primaryEmail
-  ) {
+  if (!firstName) {
+
     const error =
       new Error(
-        "Primary Contact first name, last name, and email are required."
+        "Primary Contact First Name is required."
       );
 
     error.statusCode = 400;
     error.code =
-      "PRIMARY_CONTACT_REQUIRED";
+      "PRIMARY_FIRST_NAME_REQUIRED";
 
     throw error;
   }
 
 
-  const requestedPackageIds =
-    Array.isArray(data.packageIds)
-      ? [
-        ...new Set(
-          data.packageIds
-            .filter(Boolean)
-        )
-      ]
-      : [];
+  if (!lastName) {
+
+    const error =
+      new Error(
+        "Primary Contact Last Name is required."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "PRIMARY_LAST_NAME_REQUIRED";
+
+    throw error;
+  }
 
 
-  if (requestedPackageIds.length === 0) {
+  if (!primaryEmail) {
+
+    const error =
+      new Error(
+        "Primary Contact Email is required."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "PRIMARY_EMAIL_REQUIRED";
+
+    throw error;
+  }
+
+
+  // ---------------------------------
+  // REQUIRE AT LEAST ONE PACKAGE
+  // ---------------------------------
+
+  if (
+    requestedPackageIds.length === 0
+  ) {
+
     const error =
       new Error(
         "At least one package must be selected."
@@ -130,59 +204,59 @@ async function onboardTenant(data) {
   }
 
 
-  const requestedResourceIds =
-    Array.isArray(data.resourceIds)
-      ? [
-        ...new Set(
-          data.resourceIds
-            .filter(Boolean)
-        )
-      ]
-      : [];
-
-
   // ---------------------------------
-  // PREVENT ACTIVE EMAIL DUPLICATE
+  // CHECK ACTIVE EMAIL UNIQUENESS
   // ---------------------------------
-  const existingEmail =
+
+  const duplicateUserResult =
     await authDb.query(
-      `SELECT
-         id,
-         tenant_id
+      `SELECT id
        FROM users
-       WHERE LOWER(email) =
-             LOWER($1)
+       WHERE LOWER(email) = LOWER($1)
          AND is_active = true
        LIMIT 1`,
-      [primaryEmail]
+      [
+        primaryEmail
+      ]
     );
 
-  if (existingEmail.rowCount) {
+
+  if (
+    duplicateUserResult.rowCount > 0
+  ) {
+
     const error =
       new Error(
-        "This email address is already associated with an active CPMSOFT account."
+        "An active user already exists with this email address."
       );
 
     error.statusCode = 409;
     error.code =
-      "EMAIL_ALREADY_ACTIVE";
+      "ACTIVE_EMAIL_EXISTS";
 
     throw error;
   }
 
+
   // ---------------------------------
   // VERIFY SELECTED PACKAGES
+  //
+  // enables_rbac is catalog data.
+  // No RBAC package key is hard-coded.
   // ---------------------------------
+
   const validPackages =
     await authDb.query(
       `SELECT
-       id,
-       package_key
-     FROM packages
-     WHERE id =
-       ANY($1::uuid[])
-       AND is_active = true`,
-      [requestedPackageIds]
+         id,
+         package_key,
+         enables_rbac
+       FROM packages
+       WHERE id = ANY($1::uuid[])
+         AND is_active = true`,
+      [
+        requestedPackageIds
+      ]
     );
 
 
@@ -190,6 +264,7 @@ async function onboardTenant(data) {
     validPackages.rowCount !==
     requestedPackageIds.length
   ) {
+
     const error =
       new Error(
         "One or more selected packages are invalid or inactive."
@@ -204,59 +279,52 @@ async function onboardTenant(data) {
 
 
   // ---------------------------------
-  // ALWAYS INCLUDE ADMINISTRATION
-  // RESOURCES FOR EVERY TENANT
+  // RBAC ENTITLEMENT
+  //
+  // The package catalog controls
+  // whether RBAC is enabled.
   // ---------------------------------
+
+  const rbacEnabled =
+    validPackages.rows.some(
+      row =>
+        row.enables_rbac === true
+    );
+
+
+  // ---------------------------------
+  // LOAD REQUIRED BASELINE RESOURCES
+  //
+  // No individual resource keys are
+  // hard-coded here.
+  //
+  // authdb.resource_sets and
+  // resource_set_resources are the
+  // source of truth.
+  // ---------------------------------
+
   const baselineResult =
     await authDb.query(
-      `SELECT
-       id,
-       resource_key
-     FROM resources
-     WHERE category = 'administration'
-       AND is_active = true
-     ORDER BY display_order,
-              resource_name`
+      `SELECT DISTINCT
+         r.id,
+         r.resource_key,
+         r.resource_name
+       FROM resource_sets rs
+
+       JOIN resource_set_resources rsr
+         ON rsr.resource_set_id = rs.id
+
+       JOIN resources r
+         ON r.id = rsr.resource_id
+
+       WHERE rs.is_active = true
+         AND rs.is_baseline = true
+         AND rsr.is_required = true
+         AND r.is_active = true
+
+       ORDER BY
+         r.resource_name`
     );
-
-
-  const requiredAdministrationKeys =
-    new Set([
-      "users",
-      "roles_permissions",
-      "company",
-      "status"
-    ]);
-
-
-  const configuredAdministrationKeys =
-    new Set(
-      baselineResult.rows.map(
-        row => row.resource_key
-      )
-    );
-
-
-  const missingAdministrationKeys =
-    [...requiredAdministrationKeys]
-      .filter(
-        key =>
-          !configuredAdministrationKeys.has(key)
-      );
-
-
-  if (missingAdministrationKeys.length > 0) {
-    const error =
-      new Error(
-        "Required administration resources are not configured."
-      );
-
-    error.statusCode = 500;
-    error.code =
-      "BASELINE_RESOURCES_MISSING";
-
-    throw error;
-  }
 
 
   const baselineIds =
@@ -266,27 +334,72 @@ async function onboardTenant(data) {
 
 
   // ---------------------------------
-  // VERIFY SELECTED RESOURCES BELONG
-  // TO AT LEAST ONE SELECTED PACKAGE
+  // LOAD DEFAULT PACKAGE RESOURCES
+  //
+  // Selecting a package automatically
+  // enables all active resources marked
+  // as default for that package.
   // ---------------------------------
-  let validRequestedResources = [];
 
-
-  if (requestedResourceIds.length > 0) {
-
-    const packageResourceResult =
-      await authDb.query(
-        `SELECT DISTINCT
+  const defaultPackageResourceResult =
+    await authDb.query(
+      `SELECT DISTINCT
          r.id,
          r.resource_key
        FROM package_resources pr
+
        JOIN resources r
          ON r.id = pr.resource_id
+
        WHERE pr.package_id =
              ANY($1::uuid[])
-         AND r.id =
-             ANY($2::uuid[])
+
+         AND pr.is_default = true
          AND r.is_active = true`,
+      [
+        requestedPackageIds
+      ]
+    );
+
+
+  const defaultPackageResourceIds =
+    defaultPackageResourceResult.rows.map(
+      row => row.id
+    );
+
+
+  // ---------------------------------
+  // VALIDATE OPTIONAL REQUESTED
+  // PACKAGE RESOURCES
+  //
+  // The client may request additional
+  // resources, but only when they belong
+  // to one of the selected packages.
+  // ---------------------------------
+
+  let optionalResourceIds = [];
+
+
+  if (
+    requestedResourceIds.length > 0
+  ) {
+
+    const requestedResourceResult =
+      await authDb.query(
+        `SELECT DISTINCT
+           r.id
+         FROM package_resources pr
+
+         JOIN resources r
+           ON r.id = pr.resource_id
+
+         WHERE pr.package_id =
+               ANY($1::uuid[])
+
+           AND r.id =
+               ANY($2::uuid[])
+
+           AND r.is_active = true`,
         [
           requestedPackageIds,
           requestedResourceIds
@@ -295,9 +408,10 @@ async function onboardTenant(data) {
 
 
     if (
-      packageResourceResult.rowCount !==
+      requestedResourceResult.rowCount !==
       requestedResourceIds.length
     ) {
+
       const error =
         new Error(
           "One or more selected resources do not belong to the selected packages or are inactive."
@@ -311,22 +425,34 @@ async function onboardTenant(data) {
     }
 
 
-    validRequestedResources =
-      packageResourceResult.rows;
+    optionalResourceIds =
+      requestedResourceResult.rows.map(
+        row => row.id
+      );
   }
 
+
+  // ---------------------------------
+  // FINAL TENANT ENTITLEMENT
+  //
+  // baseline
+  // + package defaults
+  // + valid optional resources
+  // ---------------------------------
 
   const finalResourceIds =
     [
       ...new Set([
         ...baselineIds,
-        ...requestedResourceIds
+        ...defaultPackageResourceIds,
+        ...optionalResourceIds
       ])
     ];
 
   // ---------------------------------
   // GENERATED IDS
   // ---------------------------------
+
   const tenantId =
     crypto.randomUUID();
 
@@ -345,6 +471,7 @@ async function onboardTenant(data) {
   const viewerRoleId =
     crypto.randomUUID();
 
+
   const authClient =
     await authDb.connect();
 
@@ -355,8 +482,13 @@ async function onboardTenant(data) {
   let appCommitted = false;
 
   let permissionIds = [];
+
   let rolePermissionCount = 0;
 
+
+  // ---------------------------------
+  // GRANT ROLE PERMISSIONS
+  // ---------------------------------
 
   async function grantRolePermissions(
     roleId,
@@ -368,32 +500,38 @@ async function onboardTenant(data) {
       resourceIds.length === 0 ||
       actionPermissionIds.length === 0
     ) {
+
       return 0;
     }
+
 
     const result =
       await appClient.query(
         `INSERT INTO role_permissions
-       (
-         tenant_id,
-         role_id,
-         resource_id,
-         permission_id,
-         created_by,
-         created_at
-       )
-       SELECT
-         $1,
-         $2,
-         resource_id,
-         permission_id,
-         NULL,
-         now()
-       FROM UNNEST($3::uuid[])
-            AS r(resource_id)
-       CROSS JOIN UNNEST($4::uuid[])
-            AS p(permission_id)
-       RETURNING id`,
+         (
+           tenant_id,
+           role_id,
+           resource_id,
+           permission_id,
+           created_by,
+           created_at
+         )
+
+         SELECT
+           $1,
+           $2,
+           resource_id,
+           permission_id,
+           NULL,
+           now()
+
+         FROM UNNEST($3::uuid[])
+              AS r(resource_id)
+
+         CROSS JOIN UNNEST($4::uuid[])
+              AS p(permission_id)
+
+         RETURNING id`,
         [
           tenantId,
           roleId,
@@ -402,23 +540,31 @@ async function onboardTenant(data) {
         ]
       );
 
+
     return result.rowCount;
   }
 
 
   try {
 
-    await authClient.query("BEGIN");
-    await appClient.query("BEGIN");
+    await authClient.query(
+      "BEGIN"
+    );
+
+    await appClient.query(
+      "BEGIN"
+    );
 
 
     // =================================
     // AUTHDB
     // =================================
 
+
     // ---------------------------------
     // CREATE TENANT
     // ---------------------------------
+
     await authClient.query(
       `INSERT INTO tenants
        (
@@ -436,12 +582,15 @@ async function onboardTenant(data) {
          state,
          postal_code,
          country,
+         licensed_users,
+         rbac_enabled,
          is_active,
          primary_contact_user_id,
          pending_primary_contact_user_id,
          created_at,
          updated_at
        )
+
        VALUES
        (
          $1,
@@ -458,6 +607,8 @@ async function onboardTenant(data) {
          $11,
          $12,
          $13,
+         $14,
+         $15,
          true,
          NULL,
          NULL,
@@ -466,77 +617,100 @@ async function onboardTenant(data) {
        )`,
       [
         tenantId,
+
         legalName,
+
         optionalText(
           tenantData.dbaName
         ),
+
         optionalText(
           tenantData.companyCode
         ),
+
         optionalText(
           tenantData.phone
         ),
+
         optionalText(
           tenantData.email
         ),
+
         optionalText(
           tenantData.website
         ),
+
         optionalText(
           tenantData.addr1
         ),
+
         optionalText(
           tenantData.addr2
         ),
+
         optionalText(
           tenantData.city
         ),
+
         optionalText(
           tenantData.state
         ),
+
         optionalText(
           tenantData.postalCode
         ),
+
         optionalText(
           tenantData.country
-        ) || "US"
+        ) || "US",
+
+        licensedUsers,
+
+        rbacEnabled
       ]
     );
+
 
     // ---------------------------------
     // SAVE TENANT PACKAGE ASSIGNMENTS
     // ---------------------------------
+
     await authClient.query(
       `INSERT INTO tenant_packages
-   (
-     tenant_id,
-     package_id,
-     is_active,
-     enabled_at,
-     disabled_at,
-     created_at,
-     updated_at
-   )
-   SELECT
-     $1,
-     package_id,
-     true,
-     now(),
-     NULL,
-     now(),
-     now()
-   FROM UNNEST($2::uuid[])
-        AS package_id`,
+       (
+         tenant_id,
+         package_id,
+         is_active,
+         enabled_at,
+         disabled_at,
+         created_at,
+         updated_at
+       )
+
+       SELECT
+         $1,
+         package_id,
+         true,
+         now(),
+         NULL,
+         now(),
+         now()
+
+       FROM UNNEST($2::uuid[])
+            AS package_id`,
       [
         tenantId,
         requestedPackageIds
       ]
     );
 
+
     // ---------------------------------
     // CREATE PENDING PRIMARY USER
+    //
     // No email is sent yet.
     // ---------------------------------
+
     await authClient.query(
       `INSERT INTO users
        (
@@ -556,6 +730,7 @@ async function onboardTenant(data) {
          created_at,
          updated_at
        )
+
        VALUES
        (
          $1,
@@ -581,15 +756,19 @@ async function onboardTenant(data) {
         firstName,
         lastName,
         `${firstName} ${lastName}`,
+
         optionalText(
           primaryContact.phone
         ),
+
         optionalText(
           primaryContact.jobTitle
         ),
+
         optionalText(
           primaryContact.department
         ),
+
         primaryContact.twofaRequired
         ?? true
       ]
@@ -598,12 +777,17 @@ async function onboardTenant(data) {
 
     // ---------------------------------
     // SET PENDING PRIMARY CONTACT
-    // USER NOW EXISTS
     // ---------------------------------
+
     await authClient.query(
       `UPDATE tenants
-       SET pending_primary_contact_user_id = $1,
-           updated_at = now()
+       SET
+         pending_primary_contact_user_id =
+           $1,
+
+         updated_at =
+           now()
+
        WHERE id = $2`,
       [
         primaryUserId,
@@ -615,6 +799,7 @@ async function onboardTenant(data) {
     // ---------------------------------
     // SAVE FINAL TENANT RESOURCES
     // ---------------------------------
+
     await authClient.query(
       `INSERT INTO tenant_resources
        (
@@ -626,6 +811,7 @@ async function onboardTenant(data) {
          created_at,
          updated_at
        )
+
        SELECT
          $1,
          resource_id,
@@ -634,6 +820,7 @@ async function onboardTenant(data) {
          NULL,
          now(),
          now()
+
        FROM UNNEST($2::uuid[])
             AS resource_id`,
       [
@@ -647,91 +834,133 @@ async function onboardTenant(data) {
     // APPDB
     // =================================
 
+
     // ---------------------------------
-    // CREATE DEFAULT TENANT ROLES
+    // CREATE PRIMARY + ADMIN
+    //
+    // These roles exist for EVERY
+    // tenant, regardless of RBAC.
     // ---------------------------------
+
     await appClient.query(
       `INSERT INTO roles
-   (
-     id,
-     tenant_id,
-     role_code,
-     role_name,
-     description,
-     is_system,
-     is_active,
-     created_at
-   )
-   VALUES
-   (
-     $1,
-     $5,
-     'PRIMARY',
-     'Primary User',
-     'Protected full-access role for the tenant Primary Contact.',
-     true,
-     true,
-     now()
-   ),
-   (
-     $2,
-     $5,
-     'ADMIN',
-     'Administrator',
-     'Full administrative access.',
-     true,
-     true,
-     now()
-   ),
-   (
-     $3,
-     $5,
-     'MANAGER',
-     'Manager',
-     'Standard management access.',
-     true,
-     true,
-     now()
-   ),
-   (
-     $4,
-     $5,
-     'VIEWER',
-     'Viewer',
-     'Read-only access.',
-     true,
-     true,
-     now()
-   )`,
+       (
+         id,
+         tenant_id,
+         role_code,
+         role_name,
+         description,
+         is_system,
+         is_active,
+         created_at
+       )
+
+       VALUES
+       (
+         $1,
+         $3,
+         'PRIMARY',
+         'Primary User',
+         'Protected role identifying the tenant Primary User.',
+         true,
+         true,
+         now()
+       ),
+
+       (
+         $2,
+         $3,
+         'ADMIN',
+         'Administrator',
+         'Full administrative access.',
+         true,
+         true,
+         now()
+       )`,
       [
         primaryRoleId,
         adminRoleId,
-        managerRoleId,
-        viewerRoleId,
         tenantId
       ]
     );
 
+
     // ---------------------------------
-    // GIVE PRIMARY ALL ACTIVE GENERIC
-    // PERMISSIONS FOR ENABLED RESOURCES
+    // CREATE MANAGER + VIEWER
+    // ONLY WHEN RBAC IS ENABLED
     // ---------------------------------
+
+    if (rbacEnabled) {
+
+      await appClient.query(
+        `INSERT INTO roles
+         (
+           id,
+           tenant_id,
+           role_code,
+           role_name,
+           description,
+           is_system,
+           is_active,
+           created_at
+         )
+
+         VALUES
+         (
+           $1,
+           $3,
+           'MANAGER',
+           'Manager',
+           'Standard management access.',
+           true,
+           true,
+           now()
+         ),
+
+         (
+           $2,
+           $3,
+           'VIEWER',
+           'Viewer',
+           'Read-only access.',
+           true,
+           true,
+           now()
+         )`,
+        [
+          managerRoleId,
+          viewerRoleId,
+          tenantId
+        ]
+      );
+    }
+
+
+    // ---------------------------------
+    // LOAD ACTIVE GENERIC PERMISSIONS
+    // ---------------------------------
+
     const permissionResult =
       await appClient.query(
         `SELECT
-       id,
-       permission_key
-     FROM permissions
-     WHERE is_active = true
-     ORDER BY
-       display_order,
-       permission_key`
+           id,
+           permission_key
+
+         FROM permissions
+
+         WHERE is_active = true
+
+         ORDER BY
+           display_order,
+           permission_key`
       );
+
 
     permissionIds =
       permissionResult.rows.map(
         row => row.id
       );
+
 
     const permissionIdByKey =
       new Map(
@@ -743,12 +972,14 @@ async function onboardTenant(data) {
         )
       );
 
+
     const managerPermissionIds =
       [
         permissionIdByKey.get("view"),
         permissionIdByKey.get("create"),
         permissionIdByKey.get("edit")
       ].filter(Boolean);
+
 
     const viewerPermissionIds =
       [
@@ -757,10 +988,9 @@ async function onboardTenant(data) {
 
 
     // ---------------------------------
-    // GRANT DEFAULT ROLE PERMISSIONS
+    // PRIMARY - FULL ACCESS
     // ---------------------------------
 
-    // PRIMARY - full access
     rolePermissionCount =
       await grantRolePermissions(
         primaryRoleId,
@@ -768,30 +998,50 @@ async function onboardTenant(data) {
         permissionIds
       );
 
-    // ADMIN - full access
+
+    // ---------------------------------
+    // ADMIN - FULL ACCESS
+    //
+    // ADMIN exists for every tenant.
+    // ---------------------------------
+
     await grantRolePermissions(
       adminRoleId,
       finalResourceIds,
       permissionIds
     );
 
-    // MANAGER - view/create/edit
-    await grantRolePermissions(
-      managerRoleId,
-      finalResourceIds,
-      managerPermissionIds
-    );
-
-    // VIEWER - view only
-    await grantRolePermissions(
-      viewerRoleId,
-      finalResourceIds,
-      viewerPermissionIds
-    );
 
     // ---------------------------------
-    // ASSIGN PRIMARY ROLE TO USER
+    // ADDITIONAL RBAC ROLE PERMISSIONS
     // ---------------------------------
+
+    if (rbacEnabled) {
+
+      // MANAGER - view/create/edit
+
+      await grantRolePermissions(
+        managerRoleId,
+        finalResourceIds,
+        managerPermissionIds
+      );
+
+
+      // VIEWER - view only
+
+      await grantRolePermissions(
+        viewerRoleId,
+        finalResourceIds,
+        viewerPermissionIds
+      );
+    }
+
+
+    // ---------------------------------
+    // ASSIGN PRIMARY + ADMIN
+    // TO PRIMARY USER
+    // ---------------------------------
+
     await appClient.query(
       `INSERT INTO user_roles
        (
@@ -802,6 +1052,7 @@ async function onboardTenant(data) {
          created_at,
          created_by
        )
+
        VALUES
        (
          $1,
@@ -810,19 +1061,31 @@ async function onboardTenant(data) {
          true,
          now(),
          NULL
+       ),
+
+       (
+         $1,
+         $2,
+         $4,
+         true,
+         now(),
+         NULL
        )`,
       [
         tenantId,
         primaryUserId,
-        primaryRoleId
+        primaryRoleId,
+        adminRoleId
       ]
     );
-
 
     // ---------------------------------
     // COMMIT APPDB FIRST
     // ---------------------------------
-    await appClient.query("COMMIT");
+
+    await appClient.query(
+      "COMMIT"
+    );
 
     appCommitted = true;
 
@@ -830,16 +1093,22 @@ async function onboardTenant(data) {
     // ---------------------------------
     // COMMIT AUTHDB
     // ---------------------------------
-    await authClient.query("COMMIT");
+
+    await authClient.query(
+      "COMMIT"
+    );
 
 
   } catch (error) {
 
     try {
+
       await authClient.query(
         "ROLLBACK"
       );
+
     } catch (_) {
+
       // Preserve original error.
     }
 
@@ -847,10 +1116,13 @@ async function onboardTenant(data) {
     if (!appCommitted) {
 
       try {
+
         await appClient.query(
           "ROLLBACK"
         );
+
       } catch (_) {
+
         // Preserve original error.
       }
     }
@@ -860,6 +1132,7 @@ async function onboardTenant(data) {
     // COMPENSATE IF APPDB COMMITTED
     // BUT AUTHDB FAILED TO COMMIT
     // ---------------------------------
+
     if (appCommitted) {
 
       try {
@@ -867,19 +1140,27 @@ async function onboardTenant(data) {
         await appDb.query(
           `DELETE FROM role_permissions
            WHERE tenant_id = $1`,
-          [tenantId]
+          [
+            tenantId
+          ]
         );
+
 
         await appDb.query(
           `DELETE FROM user_roles
            WHERE tenant_id = $1`,
-          [tenantId]
+          [
+            tenantId
+          ]
         );
+
 
         await appDb.query(
           `DELETE FROM roles
            WHERE tenant_id = $1`,
-          [tenantId]
+          [
+            tenantId
+          ]
         );
 
       } catch (cleanupError) {
@@ -931,7 +1212,9 @@ async function onboardTenant(data) {
   // ---------------------------------
   // RESULT
   // ---------------------------------
+
   return {
+
     success: true,
 
     tenantId,
@@ -939,6 +1222,12 @@ async function onboardTenant(data) {
     primaryUserId,
 
     primaryRoleId,
+
+    adminRoleId,
+
+    licensedUsers,
+
+    rbacEnabled,
 
     enabledResourceCount:
       finalResourceIds.length,

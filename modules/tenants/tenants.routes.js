@@ -214,6 +214,12 @@ module.exports = async function (fastify) {
 
                 country: {
                   type: "string"
+                },
+
+                licensedUsers: {
+                  type: "integer",
+                  minimum: 1,
+                  default: 1
                 }
               }
             },
