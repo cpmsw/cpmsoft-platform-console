@@ -162,7 +162,8 @@ module.exports = async function (fastify) {
               additionalProperties: false,
 
               required: [
-                "legalName"
+                "legalName",
+                "companyCode"
               ],
 
               properties: {
@@ -176,7 +177,8 @@ module.exports = async function (fastify) {
                 },
 
                 companyCode: {
-                  type: "string"
+                  type: "string",
+                  minLength: 1
                 },
 
                 phone: {
@@ -220,8 +222,19 @@ module.exports = async function (fastify) {
                   type: "integer",
                   minimum: 1,
                   default: 1
-                }
-              }
+                },
+
+                maxCompanies: {
+                  type: "integer",
+                  minimum: 1,
+                  default: 1
+                },
+
+                rbacEnabled: {
+                  type: "boolean",
+                  default: false
+                }    
+              }          
             },
 
 
@@ -323,7 +336,11 @@ module.exports = async function (fastify) {
 
             message:
               error.message ||
-              "The customer could not be onboarded."
+              "The customer could not be onboarded.",
+
+            details:
+              error.details ||
+              null
           });
       }
     }
