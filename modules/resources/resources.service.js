@@ -283,6 +283,7 @@ async function createResource(data) {
        (
          resource_key,
          resource_name,
+         display_name,
          category,
          description,
          is_active,
@@ -290,10 +291,21 @@ async function createResource(data) {
          created_at,
          updated_at
        )
-       VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+       VALUES (
+         $1,
+         $2,
+         $3,
+         $4,
+         $5,
+         $6,
+         $7,
+         now(),
+         now()
+       )
        RETURNING *`,
       [
         data.resource_key.trim(),
+        data.resource_name.trim(),
         data.resource_name.trim(),
         data.category?.trim() || null,
         data.description?.trim() || null,
@@ -309,8 +321,10 @@ async function createResource(data) {
       const duplicate = new Error(
         "Resource key already exists."
       );
+
       duplicate.statusCode = 409;
       duplicate.code = "RESOURCE_KEY_EXISTS";
+
       throw duplicate;
     }
 
@@ -326,6 +340,7 @@ async function updateResource(id, data) {
   const result = await authDb.query(
     `UPDATE resources
      SET resource_name = $2,
+         display_name = $2,
          category = $3,
          description = $4,
          display_order = $5,
@@ -342,15 +357,18 @@ async function updateResource(id, data) {
   );
 
   if (result.rowCount === 0) {
-    const error = new Error("Resource not found.");
+    const error = new Error(
+      "Resource not found."
+    );
+
     error.statusCode = 404;
     error.code = "RESOURCE_NOT_FOUND";
+
     throw error;
   }
 
   return result.rows[0];
 }
-
 
 // ---------------------------------
 // ACTIVATE / DEACTIVATE RESOURCE

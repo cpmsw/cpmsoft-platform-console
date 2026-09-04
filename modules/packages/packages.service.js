@@ -172,28 +172,31 @@ async function createPackage(data) {
   try {
     const result = await authDb.query(
       `INSERT INTO packages
-       (
-         package_key,
-         package_name,
-         description,
-         is_active,
-         display_order,
-         created_at,
-         updated_at
-       )
-       VALUES
-       (
-         $1,
-         $2,
-         $3,
-         $4,
-         $5,
-         now(),
-         now()
-       )
-       RETURNING *`,
+(
+   package_key,
+   package_name,
+   display_name,
+   description,
+   is_active,
+   display_order,
+   created_at,
+   updated_at
+)
+ VALUES
+(
+   $1,
+   $2,
+   $3,
+   $4,
+   $5,
+   $6,
+   now(),
+   now()
+)
+ RETURNING *`,
       [
         data.package_key.trim(),
+        data.package_name.trim(),
         data.package_name.trim(),
         data.description?.trim() || null,
         data.is_active ?? true,
@@ -233,12 +236,13 @@ async function updatePackage(
   const result =
     await authDb.query(
       `UPDATE packages
-       SET package_name = $2,
-           description = $3,
-           display_order = $4,
-           updated_at = now()
-       WHERE id = $1
-       RETURNING *`,
+ SET package_name = $2,
+     display_name = $2,
+     description = $3,
+     display_order = $4,
+     updated_at = now()
+ WHERE id = $1
+ RETURNING *`,
       [
         id,
         data.package_name.trim(),
