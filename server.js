@@ -216,16 +216,6 @@ fastify.get("/", {
 });
 
 
-// ---------------------------------
-// LOAD GENERAL ROUTES
-// ---------------------------------
-fastify.register(AutoLoad, {
-  dir: path.join(__dirname, "routes"),
-
-  options: {
-    prefix: "/api/platform"
-  }
-});
 
 
 // ---------------------------------

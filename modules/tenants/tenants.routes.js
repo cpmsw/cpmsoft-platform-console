@@ -2,6 +2,9 @@ const service = require('cpmsoft-core/tenants/tenants.service');
 
 const onboardingService = require("./tenants.onboarding.service");
 
+const tenantEntitlementsService =
+  require("./tenantEntitlements.service");
+
 module.exports = async function (fastify) {
 
   // GET TENANTS
@@ -233,8 +236,8 @@ module.exports = async function (fastify) {
                 rbacEnabled: {
                   type: "boolean",
                   default: false
-                }    
-              }          
+                }
+              }
             },
 
 
@@ -341,6 +344,196 @@ module.exports = async function (fastify) {
             details:
               error.details ||
               null
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
+  // GET TENANT ENTITLEMENTS
+  // ---------------------------------
+  fastify.get(
+    "/:id/entitlements",
+    {
+      schema: {
+        tags: ["Tenants"],
+
+        summary:
+          "Get tenant package and resource entitlements",
+
+        params: {
+          type: "object",
+          required: ["id"],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const result =
+          await tenantEntitlementsService
+            .getTenantEntitlements(
+              request.params.id
+            );
+
+        return result;
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_ENTITLEMENTS_FAILED",
+
+            message:
+              error.message ||
+              "Unable to retrieve tenant entitlements."
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
+  // UPDATE TENANT ENTITLEMENTS
+  // ---------------------------------
+  fastify.put(
+    "/:id/entitlements",
+    {
+      schema: {
+        tags: ["Tenants"],
+
+        summary:
+          "Update tenant package and resource entitlements",
+
+        params: {
+          type: "object",
+          required: ["id"],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        },
+
+        body: {
+          type: "object",
+
+          required: [
+            "packageIds",
+            "resourceIds",
+            "licensedUsers",
+            "maxCompanies",
+            "rbacEnabled"
+          ],
+
+          additionalProperties: false,
+
+          properties: {
+            packageIds: {
+              type: "array",
+
+              items: {
+                type: "string",
+                format: "uuid"
+              },
+
+              uniqueItems: true
+            },
+            resourceIds: {
+              type: "array",
+
+              items: {
+                type: "string",
+                format: "uuid"
+              },
+
+              uniqueItems: true
+            },
+
+            licensedUsers: {
+              type: "integer",
+              minimum: 1
+            },
+
+            maxCompanies: {
+              type: "integer",
+              minimum: 1
+            },
+
+            rbacEnabled: {
+              type: "boolean"
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const result =
+          await tenantEntitlementsService
+            .updateTenantEntitlements({
+              tenantId:
+                request.params.id,
+
+              packageIds:
+                request.body.packageIds,
+
+              resourceIds:
+                request.body.resourceIds,
+
+              licensedUsers:
+                request.body.licensedUsers,
+
+              maxCompanies:
+                request.body.maxCompanies,
+
+              rbacEnabled:
+                request.body.rbacEnabled
+            });
+
+
+        return result;
+
+
+      } catch (error) {
+
+        request.log.error(error);
+
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_ENTITLEMENTS_UPDATE_FAILED",
+
+            message:
+              error.message ||
+              "Unable to update tenant entitlements."
           });
       }
     }
