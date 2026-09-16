@@ -154,9 +154,7 @@ module.exports = async function (fastify) {
 
           required: [
             "tenant",
-            "primaryContact",
-            "packageIds",
-            "resourceIds"
+            "primaryContact"
           ],
           properties: {
 

@@ -1,6 +1,15 @@
 const authDb =
   require("../../db/authDb");
 
+const appDb =
+  require("../../db/appDb");
+
+const {
+  syncTenantRolePermissions
+} = require(
+  "./provisioning/syncTenantRolePermissions"
+);
+
 // =================================
 // RESOLVE TENANT ENTITLEMENTS
 // =================================
@@ -436,10 +445,14 @@ async function updateTenantEntitlements({
   const client =
     await authDb.connect();
 
+  const appClient =
+    await appDb.connect();
+
 
   try {
 
     await client.query("BEGIN");
+    await appClient.query("BEGIN");
 
 
     // ---------------------------------
@@ -731,7 +744,35 @@ async function updateTenantEntitlements({
     }
 
 
+    // ---------------------------------
+    // SYNCHRONIZE APPDB RBAC
+    //
+    // Tenant entitlements live in
+    // authdb. role_permissions live in
+    // appdb.
+    //
+    // Keep the standard Tenant roles
+    // synchronized with the final
+    // enabled Resource set.
+    // ---------------------------------
+
+    await syncTenantRolePermissions({
+      appClient,
+      tenantId,
+      finalResourceIds,
+      rbacEnabled
+    });
+
+
+    // ---------------------------------
+    // COMMIT
+    // ---------------------------------
+
+    await appClient.query("COMMIT");
+
     await client.query("COMMIT");
+
+
 
 
     // ---------------------------------
@@ -744,6 +785,18 @@ async function updateTenantEntitlements({
 
 
   } catch (error) {
+
+    try {
+
+      await appClient.query(
+        "ROLLBACK"
+      );
+
+    } catch (rollbackError) {
+
+      // Preserve the original error.
+    }
+
 
     try {
 
@@ -760,8 +813,9 @@ async function updateTenantEntitlements({
     throw error;
 
 
-  } finally {
+    } finally {
 
+    appClient.release();
     client.release();
   }
 }

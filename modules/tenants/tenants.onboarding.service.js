@@ -115,6 +115,60 @@ async function onboardTenant(
 
 
   // ---------------------------------
+  // INITIAL TENANT PACKAGE BASELINE
+  //
+  // New Tenant creation may omit
+  // commercial Package selections.
+  //
+  // In that case, onboard with only
+  // the required Settings Package.
+  // Commercial entitlements are added
+  // later through Tenant Resources.
+  // ---------------------------------
+
+  let onboardingPackageIds =
+    requestedPackageIds;
+
+
+  if (
+    onboardingPackageIds.length === 0
+  ) {
+
+    const settingsPackageResult =
+      await authDb.query(
+        `SELECT id
+         FROM packages
+         WHERE package_key = 'settings'
+           AND is_active = true
+         LIMIT 1`
+      );
+
+
+    if (
+      settingsPackageResult.rowCount === 0
+    ) {
+
+      const error =
+        new Error(
+          "Required Settings package is not active."
+        );
+
+      error.statusCode = 500;
+
+      error.code =
+        "SETTINGS_PACKAGE_MISSING";
+
+      throw error;
+    }
+
+
+    onboardingPackageIds = [
+      settingsPackageResult.rows[0].id
+    ];
+  }
+
+
+  // ---------------------------------
   // VALIDATE TENANT ENTITLEMENTS
   //
   // Packages and their Resources are
@@ -126,7 +180,8 @@ async function onboardTenant(
   } =
     await validateEntitlements({
       authDb,
-      requestedPackageIds,
+      requestedPackageIds:
+        onboardingPackageIds,
       requestedResourceIds
     });
   // ---------------------------------
@@ -192,7 +247,8 @@ async function onboardTenant(
       primaryUserId,
       tenantData,
       primaryContact,
-      requestedPackageIds,
+      requestedPackageIds:
+        onboardingPackageIds,
       finalResourceIds,
       legalName,
       companyCode,
