@@ -1,9 +1,15 @@
-const service = require('cpmsoft-core/tenants/tenants.service');
+const service =
+  require("cpmsoft-core/tenants/tenants.service");
 
-const onboardingService = require("./tenants.onboarding.service");
+const onboardingService =
+  require("./tenants.onboarding.service");
+
+const activationService =
+  require("./tenants.activation.service");
 
 const tenantEntitlementsService =
   require("./tenantEntitlements.service");
+
 
 module.exports = async function (fastify) {
 
@@ -342,6 +348,151 @@ module.exports = async function (fastify) {
             details:
               error.details ||
               null
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
+  // ACTIVATE TENANT
+  //
+  // Phase 2 of Tenant onboarding.
+  //
+  // Provisions APPDB from the Tenant's
+  // saved AUTHDB configuration and
+  // sends the first activation email.
+  // ---------------------------------
+
+  fastify.post(
+    "/:id/activate",
+    {
+      schema: {
+        tags: ["Tenants"],
+
+        summary:
+          "Provision and activate a pending Tenant",
+
+        params: {
+          type: "object",
+
+          required: [
+            "id"
+          ],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const result =
+          await activationService
+            .activateTenant(
+              request.params.id
+            );
+
+
+        return result;
+
+
+      } catch (error) {
+
+        request.log.error(error);
+
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_ACTIVATION_FAILED",
+
+            message:
+              error.message ||
+              "The Tenant could not be activated."
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
+  // RESEND ACTIVATION EMAIL
+  //
+  // Email only.
+  //
+  // APPDB must already be provisioned.
+  // No provisioning is performed here.
+  // ---------------------------------
+
+  fastify.post(
+    "/:id/resend-activation",
+    {
+      schema: {
+        tags: ["Tenants"],
+
+        summary:
+          "Resend Tenant activation email",
+
+        params: {
+          type: "object",
+
+          required: [
+            "id"
+          ],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const result =
+          await activationService
+            .resendActivationEmail(
+              request.params.id
+            );
+
+
+        return result;
+
+
+      } catch (error) {
+
+        request.log.error(error);
+
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_ACTIVATION_EMAIL_FAILED",
+
+            message:
+              error.message ||
+              "The activation email could not be sent."
           });
       }
     }

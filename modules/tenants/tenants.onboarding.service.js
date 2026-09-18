@@ -4,27 +4,6 @@ const crypto =
 const authDb =
   require("../../db/authDb");
 
-const appDb =
-  require("../../db/appDb");
-
-const usersService =
-  require("cpmsoft-core/users/users.service");
-
-const {
-  provisionCompany
-} =
-  require("./provisioning/provisionCompany");
-
-const {
-  provisionDropdowns
-} =
-  require("./provisioning/provisionDropdowns");
-
-const {
-  compensateOnboarding
-} =
-  require("./provisioning/compensateOnboarding");
-
 const {
   validateOnboardingInput
 } =
@@ -40,29 +19,43 @@ const {
 } =
   require("./provisioning/provisionAuthTenant");
 
-const {
-  provisionRoles
-} =
-  require("./provisioning/provisionRoles");
-
-const {
-  provisionRolePermissions
-} =
-  require("./provisioning/provisionRolePermissions");
-
-const {
-  assignPrimaryUserRoles
-} =
-  require("./provisioning/assignPrimaryUserRoles");
-
 
 // =================================
 // ONBOARD TENANT
+//
+// Phase 1 of Tenant onboarding.
+//
+// This operation:
+//
+// - validates Tenant information
+// - validates Packages / Resources
+// - creates Tenant in AUTHDB
+// - creates pending primary user
+// - saves licensing
+// - saves Package assignments
+// - saves Resource assignments
+//
+// This operation DOES NOT:
+//
+// - provision APPDB
+// - assign APPDB roles
+// - create APPDB company
+// - create APPDB dropdown defaults
+// - send activation email
+//
+// The Tenant remains:
+//
+//   onboarding_status =
+//     PENDING_SETUP
+//
+// until the separate Activate Tenant
+// operation is successfully completed.
 // =================================
 
 async function onboardTenant(
   payload = {}
 ) {
+
   const {
     tenantData,
     primaryContact,
@@ -80,6 +73,8 @@ async function onboardTenant(
     validateOnboardingInput(
       payload
     );
+
+
   // ---------------------------------
   // CHECK ACTIVE EMAIL UNIQUENESS
   // ---------------------------------
@@ -107,6 +102,7 @@ async function onboardTenant(
       );
 
     error.statusCode = 409;
+
     error.code =
       "ACTIVE_EMAIL_EXISTS";
 
@@ -117,13 +113,13 @@ async function onboardTenant(
   // ---------------------------------
   // INITIAL TENANT PACKAGE BASELINE
   //
-  // New Tenant creation may omit
-  // commercial Package selections.
+  // If the caller does not provide
+  // Package selections, use only the
+  // required Settings Package.
   //
-  // In that case, onboard with only
-  // the required Settings Package.
-  // Commercial entitlements are added
-  // later through Tenant Resources.
+  // The new onboarding wizard will
+  // eventually provide the complete
+  // Package / Resource selections.
   // ---------------------------------
 
   let onboardingPackageIds =
@@ -170,9 +166,6 @@ async function onboardTenant(
 
   // ---------------------------------
   // VALIDATE TENANT ENTITLEMENTS
-  //
-  // Packages and their Resources are
-  // the single source of truth.
   // ---------------------------------
 
   const {
@@ -180,10 +173,14 @@ async function onboardTenant(
   } =
     await validateEntitlements({
       authDb,
+
       requestedPackageIds:
         onboardingPackageIds,
+
       requestedResourceIds
     });
+
+
   // ---------------------------------
   // GENERATED IDS
   // ---------------------------------
@@ -194,37 +191,13 @@ async function onboardTenant(
   const primaryUserId =
     crypto.randomUUID();
 
-  const primaryRoleId =
-    crypto.randomUUID();
 
-  const adminRoleId =
-    crypto.randomUUID();
-
-  const managerRoleId =
-    crypto.randomUUID();
-
-  const viewerRoleId =
-    crypto.randomUUID();
-
-  const companyId =
-    crypto.randomUUID();
+  // ---------------------------------
+  // AUTHDB TRANSACTION
+  // ---------------------------------
 
   const authClient =
     await authDb.connect();
-
-  const appClient =
-    await appDb.connect();
-
-
-  let appCommitted = false;
-
-
-
-  let rolePermissionCount = 0;
-
-  let dropdownDefaultCount = 0;
-
-
 
 
   try {
@@ -233,13 +206,6 @@ async function onboardTenant(
       "BEGIN"
     );
 
-    await appClient.query(
-      "BEGIN"
-    );
-
-    // =================================
-    // AUTHDB
-    // =================================
 
     await provisionAuthTenant({
       authClient,
@@ -247,8 +213,10 @@ async function onboardTenant(
       primaryUserId,
       tenantData,
       primaryContact,
+
       requestedPackageIds:
         onboardingPackageIds,
+
       finalResourceIds,
       legalName,
       companyCode,
@@ -260,101 +228,27 @@ async function onboardTenant(
       rbacEnabled
     });
 
-    // =================================
-    // APPDB
-    // =================================
 
-    // ---------------------------------
-    // PROVISION TENANT ROLES
-    // ---------------------------------
+    // Explicitly establish the
+    // onboarding state.
+    //
+    // provisionAuthTenant currently
+    // relies on the DB default, but
+    // keeping this explicit here makes
+    // the onboarding boundary clear.
 
-    await provisionRoles({
-      appClient,
-      tenantId,
-      primaryRoleId,
-      adminRoleId,
-      managerRoleId,
-      viewerRoleId,
-      rbacEnabled
-    });
-
-
-    // ---------------------------------
-    // PROVISION ROLE PERMISSIONS
-    // ---------------------------------
-
-    const rolePermissionResult =
-      await provisionRolePermissions({
-        appClient,
-        tenantId,
-        finalResourceIds,
-        rbacEnabled,
-        primaryRoleId,
-        adminRoleId,
-        managerRoleId,
-        viewerRoleId
-      });
-
-
-    rolePermissionCount =
-      rolePermissionResult
-        .primaryPermissionCount;
-
-
-    // ---------------------------------
-    // ASSIGN PRIMARY USER ROLES
-    // ---------------------------------
-
-    await assignPrimaryUserRoles({
-      appClient,
-      tenantId,
-      primaryUserId,
-      primaryRoleId,
-      adminRoleId
-    });
-
-    // ---------------------------------
-    // CREATE INITIAL COMPANY
-    // ---------------------------------
-
-    await provisionCompany({
-      appClient,
-      companyId,
-      tenantId,
-      primaryUserId,
-      tenantData
-    });
-
-
-    // ---------------------------------
-    // COPY STANDARD DROPDOWN DEFAULTS
-    // ---------------------------------
-
-    const dropdownResult =
-      await provisionDropdowns({
-        appClient,
-        tenantId,
-        primaryUserId
-      });
-
-    dropdownDefaultCount =
-      dropdownResult.dropdownDefaultCount;
-
-
-    // ---------------------------------
-    // COMMIT APPDB FIRST
-    // ---------------------------------
-
-    await appClient.query(
-      "COMMIT"
+    await authClient.query(
+      `UPDATE tenants
+       SET onboarding_status =
+             'PENDING_SETUP',
+           updated_at =
+             now()
+       WHERE id = $1`,
+      [
+        tenantId
+      ]
     );
 
-    appCommitted = true;
-
-
-    // ---------------------------------
-    // COMMIT AUTHDB
-    // ---------------------------------
 
     await authClient.query(
       "COMMIT"
@@ -375,78 +269,12 @@ async function onboardTenant(
     }
 
 
-    if (!appCommitted) {
-
-      try {
-
-        await appClient.query(
-          "ROLLBACK"
-        );
-
-      } catch (_) {
-
-        // Preserve original error.
-      }
-    }
-
-
-    // ---------------------------------
-    // COMPENSATE IF APPDB COMMITTED
-    // BUT AUTHDB FAILED TO COMMIT
-    // ---------------------------------
-
-    if (appCommitted) {
-
-      try {
-
-        await compensateOnboarding({
-          appDb,
-          tenantId
-        });
-
-      } catch (cleanupError) {
-
-        console.error(
-          "Onboarding compensation failed:",
-          cleanupError
-        );
-      }
-    }
-
-
     throw error;
+
 
   } finally {
 
     authClient.release();
-    appClient.release();
-  }
-
-
-  // =================================
-  // SEND ACTIVATION ONLY AFTER
-  // PROVISIONING IS COMPLETE
-  // =================================
-
-  let invitationSent = false;
-
-  let invitationWarning = null;
-
-
-  try {
-
-    await usersService.resendInvite(
-      tenantId,
-      primaryUserId
-    );
-
-    invitationSent = true;
-
-  } catch (error) {
-
-    invitationWarning =
-      error.message ||
-      "The tenant was provisioned, but the activation email could not be sent.";
   }
 
 
@@ -462,29 +290,19 @@ async function onboardTenant(
 
     primaryUserId,
 
-    primaryRoleId,
-
-    adminRoleId,
-
-    companyId,
+    onboardingStatus:
+      "PENDING_SETUP",
 
     licensedUsers,
 
     maxCompanies,
-
-    dropdownDefaultCount,
 
     rbacEnabled,
 
     enabledResourceCount:
       finalResourceIds.length,
 
-    primaryPermissionCount:
-      rolePermissionCount,
-
-    invitationSent,
-
-    invitationWarning
+    invitationSent: false
   };
 }
 
