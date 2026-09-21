@@ -78,9 +78,10 @@ async function activateTenant(
          licensed_users,
          max_companies,
          rbac_enabled,
-         onboarding_status,
-         pending_primary_contact_user_id
-       FROM tenants
+        onboarding_status,
+        primary_contact_user_id,
+        pending_primary_contact_user_id 
+      FROM tenants
        WHERE id = $1
          AND is_active = true
        LIMIT 1`,
@@ -130,6 +131,28 @@ async function activateTenant(
 
     error.code =
       "TENANT_NOT_PENDING_SETUP";
+
+    throw error;
+  }
+
+  // ---------------------------------
+  // VERIFY TENANT HAS NOT ALREADY
+  // PROMOTED A PRIMARY USER
+  // ---------------------------------
+
+  if (
+    tenant.primary_contact_user_id
+  ) {
+
+    const error =
+      new Error(
+        "Tenant already has an activated primary contact."
+      );
+
+    error.statusCode = 409;
+
+    error.code =
+      "PRIMARY_CONTACT_ALREADY_ACTIVE";
 
     throw error;
   }

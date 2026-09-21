@@ -62,7 +62,6 @@ async function onboardTenant(
     requestedPackageIds,
     requestedResourceIds,
     legalName,
-    companyCode,
     licensedUsers,
     maxCompanies,
     rbacEnabled,
@@ -199,12 +198,39 @@ async function onboardTenant(
   const authClient =
     await authDb.connect();
 
+  let companyCode;
 
   try {
 
     await authClient.query(
       "BEGIN"
     );
+
+
+    // ---------------------------------
+    // GENERATE COMPANY NUMBER
+    //
+    // Internal immutable Company Number.
+    //
+    // PostgreSQL sequence guarantees that
+    // concurrent Tenant creation cannot
+    // generate the same number.
+    //
+    // Example:
+    //   C100001
+    //   C100002
+    // ---------------------------------
+
+    const companyNumberResult =
+      await authClient.query(
+        `SELECT
+       nextval(
+         'tenant_company_number_seq'
+       ) AS company_number`
+      );
+
+    companyCode =
+      `C${companyNumberResult.rows[0].company_number}`;
 
 
     await provisionAuthTenant({
@@ -289,6 +315,9 @@ async function onboardTenant(
     tenantId,
 
     primaryUserId,
+
+    companyNumber:
+      companyCode,
 
     onboardingStatus:
       "PENDING_SETUP",

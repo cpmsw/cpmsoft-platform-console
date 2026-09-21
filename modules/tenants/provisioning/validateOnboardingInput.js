@@ -73,20 +73,6 @@ function validateOnboardingInput(
   }
 
 
-  const companyCode =
-    requiredText(
-      tenantData.companyCode
-    );
-
-
-  if (!companyCode) {
-    throw validationError(
-      "Company Code is required.",
-      "COMPANY_CODE_REQUIRED"
-    );
-  }
-
-
   const licensedUsers =
     Number(
       tenantData.licensedUsers ?? 1
@@ -174,7 +160,6 @@ function validateOnboardingInput(
     requestedPackageIds,
     requestedResourceIds,
     legalName,
-    companyCode,
     licensedUsers,
     maxCompanies,
     rbacEnabled,

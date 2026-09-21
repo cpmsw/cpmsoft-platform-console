@@ -169,8 +169,7 @@ module.exports = async function (fastify) {
               additionalProperties: false,
 
               required: [
-                "legalName",
-                "companyCode"
+                "legalName"
               ],
 
               properties: {
@@ -181,11 +180,6 @@ module.exports = async function (fastify) {
 
                 dbaName: {
                   type: "string"
-                },
-
-                companyCode: {
-                  type: "string",
-                  minLength: 1
                 },
 
                 phone: {
