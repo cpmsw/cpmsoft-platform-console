@@ -13,6 +13,9 @@ const tenantEntitlementsService =
 const audit =
   require("../audit");
 
+const tenantDetailsService =
+  require("./tenants.details.service");
+
 module.exports = async function (fastify) {
 
   // GET TENANTS
@@ -826,10 +829,6 @@ module.exports = async function (fastify) {
             type: ['string', 'null']
           },
 
-          companyCode: {
-            type: ['string', 'null']
-          },
-
           phone: {
             type: ['string', 'null']
           },
@@ -870,10 +869,12 @@ module.exports = async function (fastify) {
     }
   }, async (request, reply) => {
     try {
-      return await service.updateTenant(
-        request.params.id,
-        request.body
-      );
+      return await tenantDetailsService
+        .updateTenantDetails(
+          request.params.id,
+          request.body,
+          request.user.adminId
+        );
     } catch (error) {
       request.log.error(error);
       return reply.code(error.statusCode || 500).send({

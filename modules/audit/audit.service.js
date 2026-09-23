@@ -28,6 +28,11 @@ const FIELD_DEFINITIONS = {
       label: "Phone",
       display: "text"
     },
+    
+    email: {
+      label: "Company Email",
+      display: "text"
+    },
 
     website: {
       label: "Website",
