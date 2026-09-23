@@ -4,6 +4,9 @@ const crypto =
 const authDb =
   require("../../db/authDb");
 
+const audit =
+  require("../audit");
+
 const {
   validateOnboardingInput
 } =
@@ -53,7 +56,8 @@ const {
 // =================================
 
 async function onboardTenant(
-  payload = {}
+  payload = {},
+  changedBy = null
 ) {
 
   const {
@@ -265,21 +269,195 @@ async function onboardTenant(
 
     await authClient.query(
       `UPDATE tenants
-       SET onboarding_status =
-             'PENDING_SETUP',
-           updated_at =
-             now()
-       WHERE id = $1`,
+   SET onboarding_status =
+         'PENDING_SETUP',
+       updated_at =
+         now()
+   WHERE id = $1`,
       [
         tenantId
       ]
     );
 
 
+    // ---------------------------------
+    // AUDIT HISTORY
+    //
+    // All audit records participate in
+    // the same AUTHDB transaction as the
+    // Tenant creation.
+    // ---------------------------------
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          tenantId,
+
+        parent_type:
+          "tenant",
+
+        parent_id:
+          tenantId,
+
+        entity_type:
+          "tenant",
+
+        entity_id:
+          tenantId,
+
+        action:
+          "CREATE",
+
+        old_data:
+          null,
+
+        new_data: {
+          company_code:
+            companyCode,
+
+          legal_name:
+            legalName,
+
+          dba_name:
+            tenantData.dbaName || null,
+
+          phone:
+            tenantData.phone || null,
+
+          website:
+            tenantData.website || null,
+
+          addr1:
+            tenantData.addr1 || null,
+
+          addr2:
+            tenantData.addr2 || null,
+
+          city:
+            tenantData.city || null,
+
+          state:
+            tenantData.state || null,
+
+          postal_code:
+            tenantData.postalCode || null,
+
+          country:
+            tenantData.country || "US",
+
+          onboarding_status:
+            "PENDING_SETUP"
+        },
+
+        changed_by:
+          changedBy
+      },
+      authClient
+    );
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          tenantId,
+
+        parent_type:
+          "tenant",
+
+        parent_id:
+          tenantId,
+
+        entity_type:
+          "primary_contact",
+
+        entity_id:
+          primaryUserId,
+
+        action:
+          "CREATE",
+
+        old_data:
+          null,
+
+        new_data: {
+          first_name:
+            firstName,
+
+          last_name:
+            lastName,
+
+          email:
+            primaryEmail,
+
+          phone:
+            primaryContact.phone || null,
+
+          job_title:
+            primaryContact.jobTitle || null,
+
+          twofa_required:
+            Boolean(
+              primaryContact.twofaRequired
+            )
+        },
+
+        changed_by:
+          changedBy
+      },
+      authClient
+    );
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          tenantId,
+
+        parent_type:
+          "tenant",
+
+        parent_id:
+          tenantId,
+
+        entity_type:
+          "tenant_entitlement",
+
+        entity_id:
+          tenantId,
+
+        action:
+          "CREATE",
+
+        old_data:
+          null,
+
+        new_data: {
+          licensed_users:
+            licensedUsers,
+
+          max_companies:
+            maxCompanies,
+
+          rbac_enabled:
+            rbacEnabled,
+
+          package_ids:
+            onboardingPackageIds,
+
+          resource_ids:
+            finalResourceIds
+        },
+
+        changed_by:
+          changedBy
+      },
+      authClient
+    );
+
+
     await authClient.query(
       "COMMIT"
     );
-
 
   } catch (error) {
 

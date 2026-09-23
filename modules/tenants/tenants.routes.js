@@ -10,6 +10,8 @@ const activationService =
 const tenantEntitlementsService =
   require("./tenantEntitlements.service");
 
+const audit =
+  require("../audit");
 
 module.exports = async function (fastify) {
 
@@ -314,9 +316,9 @@ module.exports = async function (fastify) {
         const result =
           await onboardingService
             .onboardTenant(
-              request.body
+              request.body,
+              request.user.adminId
             );
-
         return reply
           .code(201)
           .send(result);
@@ -492,6 +494,107 @@ module.exports = async function (fastify) {
     }
   );
 
+
+  // ---------------------------------
+  // GET TENANT HISTORY
+  // ---------------------------------
+
+  fastify.get(
+    "/:id/history",
+    {
+      schema: {
+        tags: ["Tenants"],
+
+        summary:
+          "Get tenant audit history",
+
+        params: {
+          type: "object",
+          required: ["id"],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        },
+
+        querystring: {
+          type: "object",
+
+          properties: {
+
+            entityType: {
+              type: "string"
+            },
+
+            action: {
+              type: "string"
+            },
+
+            userSearch: {
+              type: "string"
+            },
+
+            dateFrom: {
+              type: "string"
+            },
+
+            dateTo: {
+              type: "string"
+            },
+
+            page: {
+              type: "integer",
+              minimum: 1,
+              default: 1
+            },
+
+            pageSize: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 25
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const result =
+          await audit.getTenantHistory(
+            request.params.id,
+            request.query
+          );
+
+        return result;
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_HISTORY_FAILED",
+
+            message:
+              error.message ||
+              "Unable to retrieve tenant history."
+          });
+      }
+    }
+  );
   // ---------------------------------
   // GET TENANT ENTITLEMENTS
   // ---------------------------------
