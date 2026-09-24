@@ -7,6 +7,11 @@ const onboardingService =
 const activationService =
   require("./tenants.activation.service");
 
+const primaryContactService =
+  require(
+    "./tenants.primary-contact.service"
+  );
+
 const tenantEntitlementsService =
   require("./tenantEntitlements.service");
 
@@ -799,6 +804,125 @@ module.exports = async function (fastify) {
       });
     }
   });
+
+  // ---------------------------------
+  // UPDATE PRIMARY CONTACT
+  // ---------------------------------
+
+  fastify.put(
+    "/:id/primary-contact",
+    {
+      schema: {
+        tags: [
+          "Tenants"
+        ],
+
+        summary:
+          "Update Tenant Primary Contact",
+
+        params: {
+          type: "object",
+
+          required: [
+            "id"
+          ],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        },
+
+        body: {
+          type: "object",
+
+          required: [
+            "firstName",
+            "lastName",
+            "email",
+            "twofaRequired"
+          ],
+
+          additionalProperties: false,
+
+          properties: {
+            firstName: {
+              type: "string",
+              minLength: 1
+            },
+
+            lastName: {
+              type: "string",
+              minLength: 1
+            },
+
+            email: {
+              type: "string",
+              format: "email"
+            },
+
+            phone: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+
+            jobTitle: {
+              type: [
+                "string",
+                "null"
+              ]
+            },
+
+            twofaRequired: {
+              type: "boolean"
+            }
+          }
+        }
+      }
+    },
+
+    async (
+      request,
+      reply
+    ) => {
+
+      try {
+
+        return await primaryContactService
+          .updatePrimaryContact(
+            request.params.id,
+            request.body,
+            request.user.adminId
+          );
+
+      } catch (error) {
+
+        request.log.error(
+          error
+        );
+
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            error:
+              error.code ||
+              "PRIMARY_CONTACT_UPDATE_FAILED",
+
+            message:
+              error.message ||
+              "Unable to update Primary Contact."
+          });
+      }
+    }
+  );
 
   // UPDATE TENANT
   fastify.put('/:id', {
