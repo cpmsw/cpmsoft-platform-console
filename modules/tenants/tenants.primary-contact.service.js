@@ -13,19 +13,6 @@ const {
 const usersService =
   require("cpmsoft-core/users/users.service");
 
-const {
-  sendEmail
-} =
-  require(
-    "cpmsoft-core/common/services/emailService"
-  );
-
-const {
-  buildPrimaryContactChangedEmail
-} =
-  require(
-    "./primaryContactEmail"
-  );
 
 // ==================================================
 // UPDATE PRIMARY CONTACT
@@ -81,11 +68,10 @@ async function updatePrimaryContact(
     await authDb.connect();
 
 
-  let updated;
-  let tenant;
-  let emailChanged = false;
-  let changesMade = false;
-  let contactChanges = [];
+let updated;
+let tenant;
+let emailChanged = false;
+let changesMade = false;
 
 
   try {
@@ -389,11 +375,6 @@ async function updatePrimaryContact(
         newData
       );
 
-    contactChanges =
-      buildContactChanges(
-        oldData,
-        newData
-      );
 
     if (changesMade) {
 
@@ -486,58 +467,13 @@ async function updatePrimaryContact(
   // successfully committed contact edit.
   // ---------------------------------
 
-  let notificationRequired = false;
-  let notificationSent = false;
-  let notificationWarning = null;
+
 
   let invitationRequired = false;
   let invitationSent = false;
   let invitationWarning = null;
 
-  if (
-    changesMade &&
-    tenant.onboarding_status !==
-    "PENDING_SETUP"
-  ) {
-
-    notificationRequired = true;
-
-
-    try {
-
-      const notificationEmail =
-        buildPrimaryContactChangedEmail({
-          firstName:
-            updated.first_name,
-
-          tenantName:
-            tenant.legal_name,
-
-          companyNumber:
-            tenant.company_code,
-
-          changes:
-            contactChanges
-        });
-
-
-      await sendEmail({
-        to:
-          updated.email,
-
-        ...notificationEmail
-      });
-
-
-      notificationSent = true;
-
-    } catch (error) {
-
-      notificationWarning =
-        error.message ||
-        "Primary Contact was updated, but the change notification email could not be sent.";
-    }
-  }
+  
 
   if (
     changesMade &&
@@ -607,10 +543,6 @@ async function updatePrimaryContact(
     changesMade,
 
     emailChanged,
-
-    notificationRequired,
-    notificationSent,
-    notificationWarning,
 
     invitationRequired,
     invitationSent,
@@ -687,59 +619,6 @@ function normalizeEmail(
     .toLowerCase();
 }
 
-function buildContactChanges(
-  oldData,
-  newData
-) {
-
-  const fields = [
-    {
-      key: "first_name",
-      label: "First Name"
-    },
-    {
-      key: "last_name",
-      label: "Last Name"
-    },
-    {
-      key: "email",
-      label: "Email"
-    },
-    {
-      key: "phone",
-      label: "Phone"
-    },
-    {
-      key: "job_title",
-      label: "Job Title"
-    },
-    {
-      key: "twofa_required",
-      label: "Require 2FA"
-    }
-  ];
-
-
-  return fields
-    .filter(
-      ({ key }) =>
-        oldData[key] !==
-        newData[key]
-    )
-    .map(
-      ({
-        key,
-        label
-      }) => ({
-        field: key,
-        label,
-        oldValue:
-          oldData[key],
-        newValue:
-          newData[key]
-      })
-    );
-}
 
 function valuesEqual(
   left,
