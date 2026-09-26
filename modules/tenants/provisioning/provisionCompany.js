@@ -16,10 +16,27 @@ async function provisionCompany({
   tenantData
 }) {
 
-  const companyCode =
+  const tenantCode =
     String(
-      tenantData.companyCode || ""
+      tenantData.tenantCode || ""
     ).trim();
+
+  if (!tenantCode) {
+    const error =
+      new Error(
+        "Tenant Code is required to provision the Company."
+      );
+
+    error.statusCode = 409;
+
+    error.code =
+      "TENANT_CODE_REQUIRED";
+
+    throw error;
+  }
+
+  const companyCode =
+    `${tenantCode}-1`;
 
   const legalName =
     String(
@@ -78,7 +95,8 @@ async function provisionCompany({
 
 
   return {
-    companyId
+    companyId,
+    companyCode
   };
 }
 

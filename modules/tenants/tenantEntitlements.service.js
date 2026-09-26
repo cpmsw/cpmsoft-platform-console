@@ -813,7 +813,7 @@ async function updateTenantEntitlements({
     throw error;
 
 
-    } finally {
+  } finally {
 
     appClient.release();
     client.release();
@@ -838,7 +838,7 @@ async function getTenantEntitlements(
          id,
          legal_name,
          dba_name,
-         company_code,
+         tenant_code,
          status,
          is_active,
          licensed_users,
@@ -1178,8 +1178,8 @@ async function getTenantEntitlements(
       dbaName:
         tenant.dba_name,
 
-      companyCode:
-        tenant.company_code,
+      tenantCode:
+        tenant.tenant_code,
 
       status:
         tenant.status,

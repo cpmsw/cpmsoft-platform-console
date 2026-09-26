@@ -33,7 +33,7 @@ async function provisionAuthTenant({
   requestedPackageIds,
   finalResourceIds,
   legalName,
-  companyCode,
+  tenantCode,
   licensedUsers,
   maxCompanies,
   firstName,
@@ -52,7 +52,7 @@ async function provisionAuthTenant({
        id,
        legal_name,
        dba_name,
-       company_code,
+       tenant_code,
        status,
        phone,
        email,
@@ -107,7 +107,7 @@ async function provisionAuthTenant({
         tenantData.dbaName
       ),
 
-      companyCode,
+      tenantCode,
 
       optionalText(
         tenantData.phone

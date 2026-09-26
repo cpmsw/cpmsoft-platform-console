@@ -72,7 +72,7 @@ async function activateTenant(
          id,
          legal_name,
          dba_name,
-         company_code,
+         tenant_code,
          website,
          country,
          licensed_users,
@@ -266,8 +266,9 @@ async function activateTenant(
   // ---------------------------------
   // RECONSTRUCT TENANT DATA
   //
-  // provisionCompany expects the same
-  // property names used by onboarding.
+  // Tenant Code identifies the Tenant.
+  // provisionCompany derives the first
+  // APPDB Company Code from it.
   // ---------------------------------
 
   const tenantData = {
@@ -277,8 +278,8 @@ async function activateTenant(
     dbaName:
       tenant.dba_name,
 
-    companyCode:
-      tenant.company_code,
+    tenantCode:
+      tenant.tenant_code,
 
     website:
       tenant.website,

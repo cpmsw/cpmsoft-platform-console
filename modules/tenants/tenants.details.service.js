@@ -61,7 +61,7 @@ async function updateTenantDetails(
         `
           SELECT
             id,
-            company_code,
+            tenant_code,
             legal_name,
             dba_name,
             phone,
@@ -110,7 +110,7 @@ async function updateTenantDetails(
     // UPDATE EDITABLE DETAILS
     //
     // IMPORTANT:
-    // company_code is intentionally
+    // tenant_code is intentionally
     // NOT updated.
     //
     // status, is_active and
@@ -141,7 +141,7 @@ async function updateTenantDetails(
 
           RETURNING
             id,
-            company_code,
+            tenant_code,
             legal_name,
             dba_name,
             phone,
@@ -282,7 +282,7 @@ async function updateTenantDetails(
       );
 
     } catch (
-      rollbackError
+    rollbackError
     ) {
 
       // Preserve the original error.
@@ -307,8 +307,8 @@ function tenantSnapshot(
 ) {
 
   return {
-    company_code:
-      tenant.company_code,
+    tenant_code:
+      tenant.tenant_code,
 
     legal_name:
       tenant.legal_name,

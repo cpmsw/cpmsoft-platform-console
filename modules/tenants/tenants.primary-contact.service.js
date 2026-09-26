@@ -91,7 +91,7 @@ let changesMade = false;
           SELECT
             id,
             legal_name,
-            company_code,
+            tenant_code,
             status,
             is_active,
             onboarding_status,

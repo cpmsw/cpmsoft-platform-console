@@ -9,8 +9,8 @@ const FIELD_DEFINITIONS = {
 
   tenant: {
 
-    company_code: {
-      label: "Company Number",
+    tenant_code: {
+      label: "Tenant Code",
       display: "text"
     },
 
@@ -28,7 +28,7 @@ const FIELD_DEFINITIONS = {
       label: "Phone",
       display: "text"
     },
-    
+
     email: {
       label: "Company Email",
       display: "text"
