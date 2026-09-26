@@ -234,7 +234,7 @@ async function onboardTenant(
       );
 
     tenantCode =
-      `C${tenantNumberResult.rows[0].tenant_number}`;
+      `T${tenantNumberResult.rows[0].tenant_number}`;
 
 
     await provisionAuthTenant({
