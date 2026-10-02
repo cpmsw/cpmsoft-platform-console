@@ -49,6 +49,37 @@ async function getUnreadCount(
 
 
 // ==================================================
+// GET ACTIVE NOTIFICATIONS
+// ==================================================
+
+async function getActiveNotifications(
+  adminId
+) {
+
+  return notifications
+    .getActiveNotifications(
+      adminId
+    );
+}
+
+
+// ==================================================
+// DISMISS NOTIFICATION
+// ==================================================
+
+async function dismissNotification(
+  adminId,
+  notificationId
+) {
+
+  return notifications
+    .dismissNotification(
+      adminId,
+      notificationId
+    );
+}
+
+// ==================================================
 // MARK NOTIFICATION READ
 // ==================================================
 
@@ -68,6 +99,8 @@ async function markNotificationRead(
 module.exports = {
   getNotifications,
   getUnreadNotifications,
+  getActiveNotifications,
   getUnreadCount,
-  markNotificationRead
+  markNotificationRead,
+  dismissNotification
 };
