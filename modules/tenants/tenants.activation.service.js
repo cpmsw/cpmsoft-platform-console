@@ -7,6 +7,9 @@ const authDb =
 const appDb =
   require("../../db/appDb");
 
+const auditEvents =
+  require("cpmsoft-core/audit_events");
+
 const usersService =
   require("cpmsoft-core/users/users.service");
 
@@ -59,9 +62,9 @@ const {
 // =================================
 
 async function activateTenant(
-  tenantId
+  tenantId,
+  changedBy = null
 ) {
-
   // ---------------------------------
   // LOAD TENANT
   // ---------------------------------
@@ -494,6 +497,45 @@ async function activateTenant(
     ]
   );
 
+  // ---------------------------------
+  // EVENT HISTORY
+  //
+  // APPDB provisioning is complete and
+  // the Tenant is now waiting for the
+  // Primary User to activate.
+  // ---------------------------------
+
+  await auditEvents.createEvent(
+    {
+      tenant_id:
+        tenantId,
+
+      event_type:
+        "TENANT_AWAITING_ACTIVATION",
+
+      event_title:
+        "Awaiting Activation",
+
+      subject_type:
+        "tenant",
+
+      subject_id:
+        tenantId,
+
+      event_data: {
+        previousStatus:
+          "PENDING_SETUP",
+
+        newStatus:
+          "AWAITING_ACTIVATION",
+
+        invitationSent
+      },
+
+      created_by:
+        changedBy
+    }
+  );
 
   // ---------------------------------
   // RESULT
@@ -545,9 +587,9 @@ async function activateTenant(
 // =================================
 
 async function resendActivationEmail(
-  tenantId
+  tenantId,
+  changedBy = null
 ) {
-
   // ---------------------------------
   // LOAD TENANT
   // ---------------------------------
@@ -647,6 +689,40 @@ async function resendActivationEmail(
     primaryUserId
   );
 
+    // ---------------------------------
+  // EVENT HISTORY
+  //
+  // The activation invitation was
+  // successfully resent to the pending
+  // Primary User.
+  // ---------------------------------
+
+  await auditEvents.createEvent(
+    {
+      tenant_id:
+        tenantId,
+
+      event_type:
+        "ACTIVATION_INVITATION_RESENT",
+
+      event_title:
+        "Activation Invitation Resent",
+
+      subject_type:
+        "user",
+
+      subject_id:
+        primaryUserId,
+
+      event_data: {
+        onboardingStatus:
+          "AWAITING_ACTIVATION"
+      },
+
+      created_by:
+        changedBy
+    }
+  );
 
   return {
     success: true,

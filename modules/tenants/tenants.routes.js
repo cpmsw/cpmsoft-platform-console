@@ -18,6 +18,12 @@ const tenantEntitlementsService =
 const audit =
   require("../audit");
 
+const auditEvents =
+  require("cpmsoft-core/audit_events");
+
+const authDb =
+  require("../../db/authDb");
+
 const tenantDetailsService =
   require("./tenants.details.service");
 
@@ -36,18 +42,6 @@ module.exports = async function (fastify) {
     }
   });
 
-  // CREATE TENANT
-  fastify.post('/', async (request, reply) => {
-    try {
-      const result = await service.createTenant(request.body);
-      return reply.code(201).send(result);
-    } catch (error) {
-      request.log.error(error);
-      return reply.code(error.statusCode || 500).send({
-        error: error.message
-      });
-    }
-  });
 
   // -----------------------------
   // TENANT PURGE PREVIEW
@@ -400,7 +394,8 @@ module.exports = async function (fastify) {
         const result =
           await activationService
             .activateTenant(
-              request.params.id
+              request.params.id,
+              request.user.adminId
             );
 
 
@@ -472,9 +467,9 @@ module.exports = async function (fastify) {
         const result =
           await activationService
             .resendActivationEmail(
-              request.params.id
+              request.params.id,
+              request.user.adminId
             );
-
 
         return result;
 
@@ -502,6 +497,254 @@ module.exports = async function (fastify) {
     }
   );
 
+
+  // ---------------------------------
+  // GET TENANT EVENT HISTORY
+  // ---------------------------------
+
+  fastify.get(
+    "/:id/event-history",
+    {
+      schema: {
+        tags: ["Tenants"],
+
+        summary:
+          "Get Tenant Event History",
+
+        params: {
+          type: "object",
+
+          required: [
+            "id"
+          ],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        },
+
+        querystring: {
+          type: "object",
+
+          properties: {
+            page: {
+              type: "integer",
+              minimum: 1,
+              default: 1
+            },
+
+            pageSize: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 25
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const tenantId =
+          request.params.id;
+
+        const {
+          page,
+          pageSize
+        } = request.query;
+
+
+        const history =
+          await auditEvents.getEvents(
+            tenantId,
+            {
+              page,
+              pageSize
+            }
+          );
+
+
+        const items =
+          Array.isArray(
+            history?.items
+          )
+            ? history.items
+            : [];
+
+        const actorIds = [
+          ...new Set(
+            items
+              .map(
+                item =>
+                  item.created_by
+              )
+              .filter(Boolean)
+          )
+        ];
+
+
+        if (
+          actorIds.length === 0
+        ) {
+
+          return history;
+        }
+
+
+        // ---------------------------------
+        // PLATFORM ADMINISTRATORS
+        // ---------------------------------
+
+        const adminResult =
+          await authDb.query(
+            `
+              SELECT
+                id,
+                display_name
+
+              FROM platform_admins
+
+              WHERE id =
+                ANY($1::uuid[])
+            `,
+            [
+              actorIds
+            ]
+          );
+
+
+        const actorNames =
+          new Map(
+            adminResult.rows.map(
+              admin => [
+                admin.id,
+
+                admin.display_name ||
+                "Platform Administrator"
+              ]
+            )
+          );
+
+
+        // ---------------------------------
+        // TENANT USERS
+        //
+        // Resolve only actors not already
+        // identified as Platform Admins.
+        // ---------------------------------
+
+        const unresolvedIds =
+          actorIds.filter(
+            id =>
+              !actorNames.has(id)
+          );
+
+
+        if (
+          unresolvedIds.length > 0
+        ) {
+
+          const userResult =
+            await authDb.query(
+              `
+                SELECT
+                  id,
+                  first_name,
+                  last_name,
+                  email
+
+                FROM users
+
+                WHERE tenant_id = $1
+                  AND id =
+                    ANY($2::uuid[])
+              `,
+              [
+                tenantId,
+                unresolvedIds
+              ]
+            );
+
+
+          for (
+            const user
+            of userResult.rows
+          ) {
+
+            const name =
+              [
+                user.first_name,
+                user.last_name
+              ]
+                .filter(Boolean)
+                .join(" ")
+                .trim();
+
+
+            actorNames.set(
+              user.id,
+              name ||
+              user.email ||
+              "Tenant User"
+            );
+          }
+        }
+
+
+        return {
+          ...history,
+
+          items:
+            items.map(
+              item => ({
+                ...item,
+
+                created_by_name:
+                  item.created_by
+                    ? (
+                      actorNames.get(
+                        item.created_by
+                      ) ||
+                      "Unknown"
+                    )
+                    : null
+              })
+            )
+        };
+
+      } catch (error) {
+
+        request.log.error(
+          error
+        );
+
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_EVENT_HISTORY_FAILED",
+
+            message:
+              error.message ||
+              "Unable to retrieve Tenant Event History."
+          });
+      }
+    }
+  );
 
   // ---------------------------------
   // GET TENANT HISTORY
@@ -796,7 +1039,10 @@ module.exports = async function (fastify) {
   // REACTIVATE TENANT
   fastify.put('/:id/reactivate', async (request, reply) => {
     try {
-      return await service.reactivateTenant(request.params.id);
+      return await service.reactivateTenant(
+        request.params.id,
+        request.user.adminId
+      );
     } catch (error) {
       request.log.error(error);
       return reply.code(error.statusCode || 500).send({
@@ -1010,7 +1256,10 @@ module.exports = async function (fastify) {
   // DEACTIVATE TENANT
   fastify.delete('/:id', async (request, reply) => {
     try {
-      return await service.deactivateTenant(request.params.id);
+      return await service.deactivateTenant(
+        request.params.id,
+        request.user.adminId
+      );
     } catch (error) {
       request.log.error(error);
       return reply.code(error.statusCode || 500).send({
