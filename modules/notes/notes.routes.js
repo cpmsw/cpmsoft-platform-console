@@ -121,9 +121,7 @@ module.exports =
             PARENT_TYPE,
             tenantId,
 
-            // Platform Console does
-            // not have user login yet.
-            null,
+            request.user.adminId,
 
             request.body
           );
@@ -202,7 +200,7 @@ module.exports =
         return notesService.updateNote(
           request.params.tenantId,
           request.params.noteId,
-          null,
+          request.user.adminId,
           request.body
         );
       }
@@ -250,7 +248,7 @@ module.exports =
         return notesService.deleteNote(
           request.params.tenantId,
           request.params.noteId,
-          null
+          request.user.adminId
         );
       }
     );
