@@ -2,10 +2,44 @@ const fastify = require("fastify")({ logger: true });
 const cors = require("@fastify/cors");
 const swagger = require("@fastify/swagger");
 const swaggerUi = require("@fastify/swagger-ui");
+const multipart = require("@fastify/multipart");
 const path = require("path");
 const AutoLoad = require("@fastify/autoload");
 const cookie = require("@fastify/cookie");
 const jwt = require("@fastify/jwt");
+
+
+// ---------------------------------
+// ATTACHMENT UPLOAD LIMITS
+// ---------------------------------
+const attachmentMaxFiles =
+  Number(
+    process.env.ATTACHMENT_MAX_FILES_PER_UPLOAD ||
+    20
+  );
+
+const attachmentMaxFileSizeMb =
+  Number(
+    process.env.ATTACHMENT_MAX_FILE_SIZE_MB ||
+    100
+  );
+
+
+// ---------------------------------
+// MULTIPART FILE UPLOADS
+// ---------------------------------
+fastify.register(multipart, {
+  limits: {
+    files:
+      attachmentMaxFiles,
+
+    fileSize:
+      attachmentMaxFileSizeMb *
+      1024 *
+      1024
+  }
+});
+
 
 // ---------------------------------
 // CORS
@@ -41,7 +75,9 @@ fastify.register(cors, {
   ]
 });
 
+
 fastify.register(cookie);
+
 
 fastify.register(jwt, {
   secret: process.env.PLATFORM_JWT_SECRET,
@@ -121,6 +157,7 @@ fastify.addHook(
     }
   }
 );
+
 
 // ---------------------------------
 // SWAGGER / OPENAPI

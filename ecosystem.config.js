@@ -71,7 +71,25 @@ module.exports = {
           process.env.SMTP_PASS,
 
         SMTP_FROM:
-          process.env.SMTP_FROM
+          process.env.SMTP_FROM,
+
+        ATTACHMENT_STORAGE_PROVIDER:
+          process.env.ATTACHMENT_STORAGE_PROVIDER,
+
+        ATTACHMENT_S3_BUCKET:
+          process.env.ATTACHMENT_S3_BUCKET,
+
+        ATTACHMENT_S3_REGION:
+          process.env.ATTACHMENT_S3_REGION,
+
+        ATTACHMENT_S3_PREFIX:
+          process.env.ATTACHMENT_S3_PREFIX,
+
+        ATTACHMENT_MAX_FILES_PER_UPLOAD:
+          process.env.ATTACHMENT_MAX_FILES_PER_UPLOAD,
+
+        ATTACHMENT_MAX_FILE_SIZE_MB:
+          process.env.ATTACHMENT_MAX_FILE_SIZE_MB
       }
     }
   ]
