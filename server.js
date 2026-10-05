@@ -201,6 +201,11 @@ fastify.register(swagger, {
         description:
           "Platform administrator authentication"
       },
+      {
+        name: "Help",
+        description:
+          "CPMSOFT SYSTEM Help administration"
+      },
     ]
   }
 });
