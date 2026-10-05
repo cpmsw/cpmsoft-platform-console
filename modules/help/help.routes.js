@@ -306,6 +306,69 @@ module.exports = async function (fastify) {
 
 
   // ---------------------------------
+  // CREATE DRAFT FROM PUBLISHED HELP
+  // ---------------------------------
+  fastify.post(
+    "/content/:id/draft",
+    {
+      schema: {
+        tags: ["Help"],
+        summary:
+          "Create SYSTEM Help draft from published content",
+
+        description:
+          "Creates a working draft from published SYSTEM Help while leaving the published content unchanged.",
+
+        params: {
+          type: "object",
+          required: ["id"],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const content =
+          await service
+            .createDraftFromPublished(
+              request.params.id,
+              request.user.adminId
+            );
+
+        return reply
+          .code(201)
+          .send(content);
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_DRAFT_CREATE_FAILED",
+
+            error:
+              error.message
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
   // UPDATE SYSTEM HELP DRAFT
   // ---------------------------------
   fastify.put(

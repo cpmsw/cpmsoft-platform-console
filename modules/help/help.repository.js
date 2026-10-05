@@ -47,11 +47,13 @@ async function getKeys(topicId = null) {
        AND ht.is_active = true`;
 
   if (topicId) {
+
     params.push(topicId);
 
     where +=
       ` AND hk.topic_id = $1`;
   }
+
 
   const result =
     await appDb.query(
@@ -134,6 +136,7 @@ async function getSystemContent() {
          ht.sort_order NULLS LAST,
          ht.title NULLS LAST,
          hk.sort_order NULLS LAST,
+         hc.status,
          hc.title`
     );
 
@@ -191,6 +194,30 @@ async function getSystemContentById(id) {
   return result.rows[0] || null;
 }
 
+
+// ---------------------------------
+// GET SYSTEM DRAFT FOR HELP KEY
+// ---------------------------------
+async function getSystemDraftByHelpKey(
+  helpKeyId
+) {
+
+  const result =
+    await appDb.query(
+      `SELECT *
+       FROM help_content
+       WHERE scope = 'SYSTEM'
+         AND content_type = 'CONTEXT'
+         AND help_key_id = $1
+         AND status = 'DRAFT'
+       LIMIT 1`,
+      [helpKeyId]
+    );
+
+  return result.rows[0] || null;
+}
+
+
 // ---------------------------------
 // CREATE SYSTEM HELP CONTENT
 // ---------------------------------
@@ -203,7 +230,8 @@ async function createSystemContent({
   contentJson,
   contentHtml,
   keywords,
-  adminId
+  adminId,
+  version = 1
 }) {
 
   try {
@@ -240,9 +268,9 @@ async function createSystemContent({
            $7,
            $8,
            'DRAFT',
-           1,
            $9,
-           $9,
+           $10,
+           $10,
            now(),
            now()
          )
@@ -256,6 +284,7 @@ async function createSystemContent({
           contentJson,
           contentHtml,
           keywords,
+          version,
           adminId
         ]
       );
@@ -268,12 +297,12 @@ async function createSystemContent({
 
       const duplicate =
         new Error(
-          "SYSTEM Help content already exists for this Help key."
+          "A SYSTEM Help draft already exists for this Help key."
         );
 
       duplicate.statusCode = 409;
       duplicate.code =
-        "HELP_CONTENT_EXISTS";
+        "HELP_DRAFT_EXISTS";
 
       throw duplicate;
     }
@@ -284,7 +313,146 @@ async function createSystemContent({
 
 
 // ---------------------------------
-// UPDATE SYSTEM HELP CONTENT
+// CREATE DRAFT FROM PUBLISHED
+// ---------------------------------
+async function createDraftFromPublished(
+  id,
+  adminId
+) {
+
+  const client =
+    await appDb.connect();
+
+  try {
+
+    await client.query("BEGIN");
+
+
+    const publishedResult =
+      await client.query(
+        `SELECT *
+         FROM help_content
+         WHERE id = $1
+           AND scope = 'SYSTEM'
+           AND status = 'PUBLISHED'
+         FOR UPDATE`,
+        [id]
+      );
+
+
+    const published =
+      publishedResult.rows[0];
+
+    if (!published) {
+
+      await client.query("ROLLBACK");
+
+      return null;
+    }
+
+
+    if (
+      published.content_type === "CONTEXT" &&
+      published.help_key_id
+    ) {
+
+      const draftResult =
+        await client.query(
+          `SELECT *
+           FROM help_content
+           WHERE scope = 'SYSTEM'
+             AND content_type = 'CONTEXT'
+             AND help_key_id = $1
+             AND status = 'DRAFT'
+           LIMIT 1`,
+          [published.help_key_id]
+        );
+
+
+      if (draftResult.rows[0]) {
+
+        await client.query("COMMIT");
+
+        return draftResult.rows[0];
+      }
+    }
+
+
+    const insertResult =
+      await client.query(
+        `INSERT INTO help_content (
+           scope,
+           tenant_id,
+           content_type,
+           topic_id,
+           help_key_id,
+           title,
+           summary,
+           content_json,
+           content_html,
+           keywords,
+           status,
+           version,
+           created_by,
+           updated_by,
+           created_at,
+           updated_at
+         )
+         VALUES (
+           'SYSTEM',
+           NULL,
+           $1,
+           $2,
+           $3,
+           $4,
+           $5,
+           $6,
+           $7,
+           $8,
+           'DRAFT',
+           $9,
+           $10,
+           $10,
+           now(),
+           now()
+         )
+         RETURNING *`,
+        [
+          published.content_type,
+          published.topic_id,
+          published.help_key_id,
+          published.title,
+          published.summary,
+          published.content_json,
+          published.content_html,
+          published.keywords,
+          Number(
+            published.version || 1
+          ) + 1,
+          adminId
+        ]
+      );
+
+
+    await client.query("COMMIT");
+
+    return insertResult.rows[0];
+
+  } catch (error) {
+
+    await client.query("ROLLBACK");
+
+    throw error;
+
+  } finally {
+
+    client.release();
+  }
+}
+
+
+// ---------------------------------
+// UPDATE SYSTEM HELP DRAFT
 // ---------------------------------
 async function updateSystemContent(
   id,
@@ -317,8 +485,11 @@ async function updateSystemContent(
            keywords = $9,
            updated_by = $10,
            updated_at = now()
+
          WHERE id = $1
            AND scope = 'SYSTEM'
+           AND status = 'DRAFT'
+
          RETURNING *`,
         [
           id,
@@ -342,12 +513,12 @@ async function updateSystemContent(
 
       const duplicate =
         new Error(
-          "SYSTEM Help content already exists for this Help key."
+          "A SYSTEM Help draft already exists for this Help key."
         );
 
       duplicate.statusCode = 409;
       duplicate.code =
-        "HELP_CONTENT_EXISTS";
+        "HELP_DRAFT_EXISTS";
 
       throw duplicate;
     }
@@ -358,32 +529,107 @@ async function updateSystemContent(
 
 
 // ---------------------------------
-// PUBLISH SYSTEM HELP CONTENT
+// PUBLISH SYSTEM HELP DRAFT
 // ---------------------------------
 async function publishSystemContent(
   id,
   adminId
 ) {
 
-  const result =
-    await appDb.query(
-      `UPDATE help_content
-       SET
-         status = 'PUBLISHED',
-         published_by = $2,
-         published_at = now(),
-         updated_by = $2,
-         updated_at = now()
-       WHERE id = $1
-         AND scope = 'SYSTEM'
-       RETURNING *`,
-      [
-        id,
-        adminId
-      ]
-    );
+  const client =
+    await appDb.connect();
 
-  return result.rows[0] || null;
+  try {
+
+    await client.query("BEGIN");
+
+
+    const draftResult =
+      await client.query(
+        `SELECT *
+         FROM help_content
+         WHERE id = $1
+           AND scope = 'SYSTEM'
+           AND status = 'DRAFT'
+         FOR UPDATE`,
+        [id]
+      );
+
+
+    const draft =
+      draftResult.rows[0];
+
+    if (!draft) {
+
+      await client.query("ROLLBACK");
+
+      return null;
+    }
+
+
+    /*
+     * Remove the currently published copy for the same
+     * Help article before promoting this draft.
+     *
+     * For Context Help the stable article identity is
+     * the Help Key.
+     */
+    if (
+      draft.content_type === "CONTEXT" &&
+      draft.help_key_id
+    ) {
+
+      await client.query(
+        `DELETE FROM help_content
+         WHERE scope = 'SYSTEM'
+           AND content_type = 'CONTEXT'
+           AND help_key_id = $1
+           AND status = 'PUBLISHED'
+           AND id <> $2`,
+        [
+          draft.help_key_id,
+          draft.id
+        ]
+      );
+    }
+
+
+    const publishResult =
+      await client.query(
+        `UPDATE help_content
+         SET
+           status = 'PUBLISHED',
+           published_by = $2,
+           published_at = now(),
+           updated_by = $2,
+           updated_at = now()
+
+         WHERE id = $1
+           AND scope = 'SYSTEM'
+           AND status = 'DRAFT'
+
+         RETURNING *`,
+        [
+          id,
+          adminId
+        ]
+      );
+
+
+    await client.query("COMMIT");
+
+    return publishResult.rows[0] || null;
+
+  } catch (error) {
+
+    await client.query("ROLLBACK");
+
+    throw error;
+
+  } finally {
+
+    client.release();
+  }
 }
 
 
@@ -392,7 +638,9 @@ module.exports = {
   getKeys,
   getSystemContent,
   getSystemContentById,
+  getSystemDraftByHelpKey,
   createSystemContent,
+  createDraftFromPublished,
   updateSystemContent,
   publishSystemContent
 };

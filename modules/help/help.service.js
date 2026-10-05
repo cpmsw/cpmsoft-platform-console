@@ -159,7 +159,7 @@ async function validateContent({
     if (
       topicId &&
       String(helpKey.topic_id) !==
-        String(topicId)
+      String(topicId)
     ) {
 
       const error =
@@ -216,6 +216,68 @@ async function createSystemContent(
     });
 }
 
+// ---------------------------------
+// CREATE DRAFT FROM PUBLISHED
+// ---------------------------------
+async function createDraftFromPublished(
+  id,
+  adminId
+) {
+
+  const existing =
+    await getSystemContentById(id);
+
+
+  if (
+    existing.status === "DRAFT"
+  ) {
+    return existing;
+  }
+
+
+  if (
+    existing.status !== "PUBLISHED"
+  ) {
+
+    const error =
+      new Error(
+        "Only published Help content can be opened as a new draft."
+      );
+
+    error.statusCode = 409;
+    error.code =
+      "HELP_CONTENT_NOT_PUBLISHED";
+
+    throw error;
+  }
+
+
+  const draft =
+    await repository
+      .createDraftFromPublished(
+        id,
+        adminId
+      );
+
+
+  if (!draft) {
+
+    const error =
+      new Error(
+        "Published Help content could not be opened for editing."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_CONTENT_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  return draft;
+}
+
 
 // ---------------------------------
 // UPDATE SYSTEM HELP CONTENT
@@ -228,7 +290,42 @@ async function updateSystemContent(
 
   // Make sure it belongs to SYSTEM
   // Help before attempting update.
-  await getSystemContentById(id);
+  const existing =
+    await getSystemContentById(id);
+
+if (
+  existing.status !== "DRAFT"
+) {
+
+  const error =
+    new Error(
+      "Only draft Help content can be published."
+    );
+
+  error.statusCode = 409;
+  error.code =
+    "HELP_CONTENT_NOT_DRAFT";
+
+  throw error;
+}    
+
+
+  if (
+    existing.status !== "DRAFT"
+  ) {
+
+    const error =
+      new Error(
+        "Published Help content cannot be edited directly. Create a draft first."
+      );
+
+    error.statusCode = 409;
+    error.code =
+      "HELP_CONTENT_NOT_DRAFT";
+
+    throw error;
+  }
+
 
   await validateContent(data);
 
@@ -297,7 +394,7 @@ async function publishSystemContent(
 
   if (
     existing.content_type ===
-      "CONTEXT" &&
+    "CONTEXT" &&
     !existing.help_key_id
   ) {
 
@@ -362,6 +459,7 @@ module.exports = {
   getSystemContent,
   getSystemContentById,
   createSystemContent,
+  createDraftFromPublished,
   updateSystemContent,
   publishSystemContent
 };
