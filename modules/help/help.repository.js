@@ -196,6 +196,61 @@ async function getSystemContentById(id) {
 
 
 // ---------------------------------
+// GET PUBLISHED SYSTEM HELP BY KEY
+// ---------------------------------
+async function getPublishedSystemContentByKey(
+  helpKey
+) {
+
+  const result =
+    await appDb.query(
+      `SELECT
+         hc.id,
+         hc.scope,
+         hc.content_type,
+         hc.topic_id,
+         hc.help_key_id,
+         hc.title,
+         hc.summary,
+         hc.content_json,
+         hc.content_html,
+         hc.keywords,
+         hc.status,
+         hc.version,
+         hc.published_at,
+
+         ht.topic_key,
+         ht.title AS topic_title,
+
+         hk.help_key,
+         hk.title AS help_key_title
+
+       FROM help_content hc
+
+       JOIN help_keys hk
+         ON hk.id = hc.help_key_id
+
+       LEFT JOIN help_topics ht
+         ON ht.id = hc.topic_id
+
+       WHERE hc.scope = 'SYSTEM'
+         AND hc.content_type = 'CONTEXT'
+         AND hc.status = 'PUBLISHED'
+         AND hk.help_key = $1
+         AND hk.is_active = true
+         AND (
+           ht.id IS NULL OR
+           ht.is_active = true
+         )
+
+       LIMIT 1`,
+      [helpKey]
+    );
+
+  return result.rows[0] || null;
+}
+
+// ---------------------------------
 // GET SYSTEM DRAFT FOR HELP KEY
 // ---------------------------------
 async function getSystemDraftByHelpKey(
@@ -638,6 +693,7 @@ module.exports = {
   getKeys,
   getSystemContent,
   getSystemContentById,
+  getPublishedSystemContentByKey,
   getSystemDraftByHelpKey,
   createSystemContent,
   createDraftFromPublished,

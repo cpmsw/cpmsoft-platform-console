@@ -201,6 +201,68 @@ module.exports = async function (fastify) {
   );
 
   // ---------------------------------
+  // GET PUBLISHED SYSTEM HELP BY KEY
+  // ---------------------------------
+  fastify.get(
+    "/published",
+    {
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Get published SYSTEM Help by Help key",
+
+        description:
+          "Returns the currently published SYSTEM contextual Help article for a registered Help key.",
+
+        querystring: {
+          type: "object",
+
+          required: [
+            "helpKey"
+          ],
+
+          properties: {
+
+            helpKey: {
+              type: "string",
+              minLength: 1
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        return await service
+          .getPublishedSystemContentByKey(
+            request.query.helpKey
+          );
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_CONTENT_LOAD_FAILED",
+
+            error:
+              error.message
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
   // CREATE SYSTEM HELP DRAFT
   // ---------------------------------
   fastify.post(

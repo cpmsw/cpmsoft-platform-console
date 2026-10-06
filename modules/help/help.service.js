@@ -56,6 +56,55 @@ async function getSystemContentById(id) {
   return content;
 }
 
+// ---------------------------------
+// GET PUBLISHED SYSTEM HELP BY KEY
+// ---------------------------------
+async function getPublishedSystemContentByKey(
+  helpKey
+) {
+
+  if (
+    !helpKey ||
+    !String(helpKey).trim()
+  ) {
+
+    const error =
+      new Error(
+        "Help key is required."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_KEY_REQUIRED";
+
+    throw error;
+  }
+
+
+  const content =
+    await repository
+      .getPublishedSystemContentByKey(
+        String(helpKey).trim()
+      );
+
+
+  if (!content) {
+
+    const error =
+      new Error(
+        "Published Help content not found."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_CONTENT_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  return content;
+}
 
 // ---------------------------------
 // VALIDATE HELP CONTENT
@@ -458,6 +507,7 @@ module.exports = {
   getKeys,
   getSystemContent,
   getSystemContentById,
+  getPublishedSystemContentByKey,
   createSystemContent,
   createDraftFromPublished,
   updateSystemContent,
