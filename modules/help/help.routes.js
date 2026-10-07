@@ -263,6 +263,130 @@ module.exports = async function (fastify) {
   );
 
   // ---------------------------------
+  // GET HELP NAVIGATION BY HELP KEY
+  // ---------------------------------
+  fastify.get(
+    "/navigation",
+    {
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Get Help navigation by Help key",
+
+        description:
+          "Returns the active Help topic and registered Help keys for contextual Help navigation.",
+
+        querystring: {
+          type: "object",
+
+          required: [
+            "helpKey"
+          ],
+
+          properties: {
+
+            helpKey: {
+              type: "string",
+              minLength: 1
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        return await service
+          .getHelpNavigationByKey(
+            request.query.helpKey
+          );
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_NAVIGATION_LOAD_FAILED",
+
+            error:
+              error.message
+          });
+      }
+    }
+  );
+
+    // ---------------------------------
+  // GET RELATED HELP BY HELP KEY
+  // ---------------------------------
+  fastify.get(
+    "/related",
+    {
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Get related Help by Help key",
+
+        description:
+          "Returns published related Help, Concepts, and Guides for the selected contextual Help article.",
+
+        querystring: {
+          type: "object",
+
+          required: [
+            "helpKey"
+          ],
+
+          properties: {
+
+            helpKey: {
+              type: "string",
+              minLength: 1
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        return await service
+          .getRelatedHelpByKey(
+            request.query.helpKey
+          );
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_RELATED_LOAD_FAILED",
+
+            error:
+              error.message
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
   // CREATE SYSTEM HELP DRAFT
   // ---------------------------------
   fastify.post(

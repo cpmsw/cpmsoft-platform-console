@@ -107,6 +107,87 @@ async function getPublishedSystemContentByKey(
 }
 
 // ---------------------------------
+// GET HELP NAVIGATION BY HELP KEY
+// ---------------------------------
+async function getHelpNavigationByKey(
+  helpKey
+) {
+
+  if (
+    !helpKey ||
+    !String(helpKey).trim()
+  ) {
+
+    const error =
+      new Error(
+        "Help key is required."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_KEY_REQUIRED";
+
+    throw error;
+  }
+
+
+  const navigation =
+    await repository
+      .getHelpNavigationByKey(
+        String(helpKey).trim()
+      );
+
+
+  if (!navigation) {
+
+    const error =
+      new Error(
+        "Help navigation not found."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_NAVIGATION_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  return navigation;
+}
+
+// ---------------------------------
+// GET RELATED HELP BY HELP KEY
+// ---------------------------------
+async function getRelatedHelpByKey(
+  helpKey
+) {
+
+  if (
+    !helpKey ||
+    !String(helpKey).trim()
+  ) {
+
+    const error =
+      new Error(
+        "Help key is required."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_KEY_REQUIRED";
+
+    throw error;
+  }
+
+
+  return await repository
+    .getRelatedHelpByKey(
+      String(helpKey).trim()
+    );
+}
+
+// ---------------------------------
 // VALIDATE HELP CONTENT
 // ---------------------------------
 async function validateContent({
@@ -508,6 +589,8 @@ module.exports = {
   getSystemContent,
   getSystemContentById,
   getPublishedSystemContentByKey,
+  getHelpNavigationByKey,
+  getRelatedHelpByKey,
   createSystemContent,
   createDraftFromPublished,
   updateSystemContent,
