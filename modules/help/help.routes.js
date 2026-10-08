@@ -1,3 +1,23 @@
+const fs =
+  require("fs");
+
+const fsPromises =
+  require("fs/promises");
+
+const os =
+  require("os");
+
+const path =
+  require("path");
+
+const crypto =
+  require("crypto");
+
+const {
+  pipeline
+} =
+  require("stream/promises");
+
 const service =
   require("./help.service");
 
@@ -324,7 +344,7 @@ module.exports = async function (fastify) {
     }
   );
 
-    // ---------------------------------
+  // ---------------------------------
   // GET RELATED HELP BY HELP KEY
   // ---------------------------------
   fastify.get(
@@ -722,5 +742,440 @@ module.exports = async function (fastify) {
     }
   );
 
+    // ==================================================
+  // UPLOAD SYSTEM HELP IMAGE
+  // ==================================================
+  fastify.post(
+    "/media/:articleId/image",
+    {
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Upload SYSTEM Help image",
+
+        consumes: [
+          "multipart/form-data"
+        ],
+
+        params: {
+          type: "object",
+
+          required: [
+            "articleId"
+          ],
+
+          properties: {
+
+            articleId: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      },
+
+      config: {
+        swaggerTransform: ({
+          schema
+        }) => {
+
+          return {
+            schema: {
+              ...schema,
+
+              body: {
+                type: "object",
+
+                required: [
+                  "file"
+                ],
+
+                properties: {
+
+                  file: {
+                    type: "string",
+                    format: "binary"
+                  },
+
+                  altText: {
+                    type: "string"
+                  },
+
+                  caption: {
+                    type: "string"
+                  }
+                }
+              }
+            }
+          };
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      if (
+        !request.isMultipart()
+      ) {
+
+        return reply
+          .code(400)
+          .send({
+            code:
+              "HELP_MEDIA_MULTIPART_REQUIRED",
+
+            error:
+              "Multipart form data is required."
+          });
+      }
+
+
+      const tempDirectory =
+        await fsPromises.mkdtemp(
+          path.join(
+            os.tmpdir(),
+            "cpmsoft-help-media-"
+          )
+        );
+
+
+      try {
+
+        let stagedFile =
+          null;
+
+        let altText =
+          null;
+
+        let caption =
+          null;
+
+
+        const parts =
+          request.parts({
+            limits: {
+              files: 1,
+
+              fileSize:
+                25 * 1024 * 1024
+            }
+          });
+
+
+        for await (
+          const part of parts
+        ) {
+
+          if (
+            part.type === "field"
+          ) {
+
+            if (
+              part.fieldname ===
+              "altText"
+            ) {
+
+              altText =
+                String(
+                  part.value || ""
+                ).trim() ||
+                null;
+
+            } else if (
+              part.fieldname ===
+              "caption"
+            ) {
+
+              caption =
+                String(
+                  part.value || ""
+                ).trim() ||
+                null;
+            }
+
+
+            continue;
+          }
+
+
+          if (stagedFile) {
+
+            const error =
+              new Error(
+                "Only one Help image may be uploaded at a time."
+              );
+
+            error.statusCode = 400;
+            error.code =
+              "HELP_MEDIA_TOO_MANY_FILES";
+
+            throw error;
+          }
+
+
+          const tempFilename =
+            crypto.randomUUID();
+
+
+          const tempPath =
+            path.join(
+              tempDirectory,
+              tempFilename
+            );
+
+
+          await pipeline(
+            part.file,
+
+            fs.createWriteStream(
+              tempPath
+            )
+          );
+
+
+          if (
+            part.file.truncated
+          ) {
+
+            const error =
+              new Error(
+                "Help image exceeds the maximum allowed size."
+              );
+
+            error.statusCode = 413;
+            error.code =
+              "HELP_IMAGE_TOO_LARGE";
+
+            throw error;
+          }
+
+
+          const stats =
+            await fsPromises.stat(
+              tempPath
+            );
+
+
+          stagedFile = {
+            tempPath,
+
+            originalFilename:
+              part.filename,
+
+            contentType:
+              part.mimetype ||
+              "application/octet-stream",
+
+            fileSizeBytes:
+              stats.size
+          };
+        }
+
+
+        if (!stagedFile) {
+
+          const error =
+            new Error(
+              "A Help image file is required."
+            );
+
+          error.statusCode = 400;
+          error.code =
+            "HELP_IMAGE_REQUIRED";
+
+          throw error;
+        }
+
+
+        const created =
+          await service
+            .createSystemHelpImage(
+              request.params.articleId,
+              request.user.adminId,
+              {
+                originalFilename:
+                  stagedFile
+                    .originalFilename,
+
+                contentType:
+                  stagedFile
+                    .contentType,
+
+                fileSizeBytes:
+                  stagedFile
+                    .fileSizeBytes,
+
+                altText,
+
+                caption,
+
+                source:
+                  fs.createReadStream(
+                    stagedFile.tempPath
+                  )
+              }
+            );
+
+
+        return reply
+          .code(201)
+          .send(created);
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_IMAGE_UPLOAD_FAILED",
+
+            error:
+              error.message
+          });
+
+      } finally {
+
+        await fsPromises.rm(
+          tempDirectory,
+          {
+            recursive: true,
+            force: true
+          }
+        );
+      }
+    }
+  );
+
+  // ==================================================
+  // OPEN SYSTEM HELP MEDIA
+  // ==================================================
+  fastify.get(
+    "/media/:mediaId/open",
+    {
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Open SYSTEM Help media",
+
+        params: {
+          type: "object",
+
+          required: [
+            "mediaId"
+          ],
+
+          properties: {
+
+            mediaId: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const opened =
+          await service
+            .openSystemHelpMedia(
+              request.params.mediaId
+            );
+
+
+        const media =
+          opened.media;
+
+        const result =
+          opened.result;
+
+
+        if (
+          result.type ===
+          "redirect"
+        ) {
+
+          return {
+            type:
+              "redirect",
+
+            url:
+              result.url
+          };
+        }
+
+
+        if (
+          result.type ===
+          "stream"
+        ) {
+
+          reply.header(
+            "Content-Type",
+            media.content_type ||
+            "application/octet-stream"
+          );
+
+
+          reply.header(
+            "Content-Disposition",
+            `inline; filename*=UTF-8''${encodeURIComponent(
+              media.original_filename
+            )}`
+          );
+
+
+          return reply.send(
+            result.stream
+          );
+        }
+
+
+        const error =
+          new Error(
+            "Unsupported Help media open result."
+          );
+
+        error.statusCode = 500;
+        error.code =
+          "HELP_MEDIA_OPEN_RESULT_INVALID";
+
+        throw error;
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_MEDIA_OPEN_FAILED",
+
+            error:
+              error.message
+          });
+      }
+    }
+  );
 
 };

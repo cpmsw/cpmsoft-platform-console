@@ -1008,6 +1008,214 @@ async function publishSystemContent(
   }
 }
 
+// ---------------------------------
+// GET HELP ARTICLE BY ID
+// ---------------------------------
+
+async function getArticleById(
+  articleId
+) {
+
+  const result =
+    await appDb.query(
+      `SELECT
+         id,
+         scope,
+         tenant_id,
+         content_type,
+         topic_id,
+         help_key_id,
+         created_at
+
+       FROM help_articles
+
+       WHERE id = $1
+         AND scope = 'SYSTEM'
+
+       LIMIT 1`,
+      [articleId]
+    );
+
+
+  return result.rows[0] || null;
+}
+
+// ---------------------------------
+// CREATE SYSTEM HELP MEDIA
+// ---------------------------------
+async function createSystemMedia({
+  id,
+  articleId,
+  mediaType,
+  originalFilename,
+  storageProvider,
+  storageKey,
+  contentType,
+  fileSizeBytes,
+  altText,
+  caption,
+  adminId
+}) {
+
+  const result =
+    await appDb.query(
+      `INSERT INTO help_media (
+         id,
+         scope,
+         tenant_id,
+         article_id,
+         media_type,
+         original_filename,
+         storage_provider,
+         storage_key,
+         content_type,
+         file_size_bytes,
+         alt_text,
+         caption,
+         created_by,
+         created_at
+       )
+       VALUES (
+         $1,
+         'SYSTEM',
+         NULL,
+         $2,
+         $3,
+         $4,
+         $5,
+         $6,
+         $7,
+         $8,
+         $9,
+         $10,
+         $11,
+         now()
+       )
+       RETURNING *`,
+      [
+        id,
+        articleId,
+        mediaType,
+        originalFilename,
+        storageProvider,
+        storageKey,
+        contentType,
+        fileSizeBytes,
+        altText || null,
+        caption || null,
+        adminId
+      ]
+    );
+
+
+  return result.rows[0];
+}
+
+
+// ---------------------------------
+// GET SYSTEM HELP MEDIA BY ID
+// ---------------------------------
+async function getSystemMediaById(
+  mediaId
+) {
+
+  const result =
+    await appDb.query(
+      `SELECT
+         hm.*,
+
+         ha.content_type AS article_content_type,
+         ha.topic_id,
+         ha.help_key_id
+
+       FROM help_media hm
+
+       JOIN help_articles ha
+         ON ha.id = hm.article_id
+
+       WHERE hm.id = $1
+         AND hm.scope = 'SYSTEM'
+         AND ha.scope = 'SYSTEM'
+
+       LIMIT 1`,
+      [mediaId]
+    );
+
+
+  return result.rows[0] || null;
+}
+
+// ---------------------------------
+// GET SYSTEM HELP MEDIA FOR ARTICLE
+// ---------------------------------
+async function getSystemMediaForArticle(
+  articleId
+) {
+
+  const result =
+    await appDb.query(
+      `SELECT *
+       FROM help_media
+
+       WHERE article_id = $1
+         AND scope = 'SYSTEM'
+
+       ORDER BY created_at`,
+      [articleId]
+    );
+
+
+  return result.rows;
+}
+
+
+// ---------------------------------
+// GET SAVED SYSTEM CONTENT FOR ARTICLE
+// ---------------------------------
+async function getSystemContentForArticle(
+  articleId
+) {
+
+  const result =
+    await appDb.query(
+      `SELECT
+         id,
+         article_id,
+         status,
+         content_json
+
+       FROM help_content
+
+       WHERE article_id = $1
+         AND scope = 'SYSTEM'`,
+      [articleId]
+    );
+
+
+  return result.rows;
+}
+
+// ---------------------------------
+// DELETE SYSTEM HELP MEDIA ROW
+// ---------------------------------
+async function deleteSystemMedia(
+  mediaId
+) {
+
+  const result =
+    await appDb.query(
+      `DELETE FROM help_media
+
+       WHERE id = $1
+         AND scope = 'SYSTEM'
+
+       RETURNING *`,
+      [mediaId]
+    );
+
+
+  return result.rows[0] || null;
+}
 
 module.exports = {
   getTopics,
@@ -1021,5 +1229,12 @@ module.exports = {
   createSystemContent,
   createDraftFromPublished,
   updateSystemContent,
-  publishSystemContent
+  publishSystemContent,
+
+  getArticleById,
+  createSystemMedia,
+  getSystemMediaById,
+  getSystemMediaForArticle,
+  getSystemContentForArticle,
+  deleteSystemMedia
 };

@@ -1,6 +1,16 @@
+const crypto =
+  require("crypto");
+
+const path =
+  require("path");
+
 const repository =
   require("./help.repository");
 
+const storageFactory =
+  require(
+    "cpmsoft-core/attachments/storage/storageFactory"
+  );
 
 // ---------------------------------
 // GET HELP TOPICS
@@ -423,21 +433,21 @@ async function updateSystemContent(
   const existing =
     await getSystemContentById(id);
 
-if (
-  existing.status !== "DRAFT"
-) {
+  if (
+    existing.status !== "DRAFT"
+  ) {
 
-  const error =
-    new Error(
-      "Only draft Help content can be published."
-    );
+    const error =
+      new Error(
+        "Only draft Help content can be published."
+      );
 
-  error.statusCode = 409;
-  error.code =
-    "HELP_CONTENT_NOT_DRAFT";
+    error.statusCode = 409;
+    error.code =
+      "HELP_CONTENT_NOT_DRAFT";
 
-  throw error;
-}    
+    throw error;
+  }
 
 
   if (
@@ -510,6 +520,165 @@ if (
   return content;
 }
 
+// ---------------------------------
+// COLLECT HELP MEDIA REFERENCES
+// ---------------------------------
+function collectMediaIds(
+  value,
+  mediaIds = new Set()
+) {
+
+  if (!value) {
+    return mediaIds;
+  }
+
+
+  if (Array.isArray(value)) {
+
+    for (const item of value) {
+
+      collectMediaIds(
+        item,
+        mediaIds
+      );
+    }
+
+    return mediaIds;
+  }
+
+
+  if (
+    typeof value !== "object"
+  ) {
+    return mediaIds;
+  }
+
+
+  if (
+    value.attrs &&
+    value.attrs.mediaId
+  ) {
+
+    mediaIds.add(
+      String(
+        value.attrs.mediaId
+      )
+    );
+  }
+
+
+  for (
+    const childValue
+    of Object.values(value)
+  ) {
+
+    collectMediaIds(
+      childValue,
+      mediaIds
+    );
+  }
+
+
+  return mediaIds;
+}
+
+
+// ---------------------------------
+// CLEAN UP UNREFERENCED HELP MEDIA
+// ---------------------------------
+async function cleanupUnreferencedSystemMedia(
+  articleId
+) {
+
+  if (!articleId) {
+    return;
+  }
+
+
+  const [
+    contentRows,
+    mediaRows
+  ] =
+    await Promise.all([
+      repository
+        .getSystemContentForArticle(
+          articleId
+        ),
+
+      repository
+        .getSystemMediaForArticle(
+          articleId
+        )
+    ]);
+
+
+  const referencedMediaIds =
+    new Set();
+
+
+  for (const content of contentRows) {
+
+    collectMediaIds(
+      content.content_json,
+      referencedMediaIds
+    );
+  }
+
+
+  for (const media of mediaRows) {
+
+    if (
+      referencedMediaIds.has(
+        String(media.id)
+      )
+    ) {
+      continue;
+    }
+
+
+    const storage =
+      storageFactory
+        .getStorageProviderByName(
+          media.storage_provider
+        );
+
+
+    try {
+
+      await storage.remove(
+        media.storage_key
+      );
+
+
+      await repository
+        .deleteSystemMedia(
+          media.id
+        );
+
+    } catch (error) {
+
+      /*
+       * Publishing has already succeeded.
+       * A cleanup failure must not make the
+       * successful publish appear to have failed.
+       *
+       * Leaving the media row allows us to
+       * identify/retry orphan cleanup later.
+       */
+      console.error(
+        "Unable to clean up unreferenced Help media.",
+        {
+          articleId,
+          mediaId:
+            media.id,
+          storageKey:
+            media.storage_key,
+          error
+        }
+      );
+    }
+  }
+}
 
 // ---------------------------------
 // PUBLISH SYSTEM HELP CONTENT
@@ -580,7 +749,337 @@ async function publishSystemContent(
     throw error;
   }
 
+
+  await cleanupUnreferencedSystemMedia(
+    content.article_id
+  );
+
+
   return content;
+}
+
+// ---------------------------------
+// SANITIZE HELP MEDIA FILE NAME
+// ---------------------------------
+function sanitizeMediaFilename(
+  originalFilename
+) {
+
+  const extension =
+    path.extname(
+      originalFilename || ""
+    );
+
+  const base =
+    path.basename(
+      originalFilename || "",
+      extension
+    );
+
+
+  let safeBase =
+    base
+      .normalize("NFKD")
+      .replace(
+        /[\u0300-\u036f]/g,
+        ""
+      )
+      .replace(
+        /[^a-zA-Z0-9._ -]/g,
+        "_"
+      )
+      .replace(
+        /\s+/g,
+        " "
+      )
+      .trim()
+      .replace(
+        /[. ]+$/g,
+        ""
+      );
+
+
+  if (!safeBase) {
+    safeBase = "image";
+  }
+
+
+  let safeExtension =
+    extension
+      .replace(
+        /[^a-zA-Z0-9.]/g,
+        ""
+      )
+      .toLowerCase();
+
+
+  if (
+    safeExtension &&
+    !safeExtension.startsWith(".")
+  ) {
+    safeExtension =
+      `.${safeExtension}`;
+  }
+
+
+  return (
+    safeBase +
+    safeExtension
+  );
+}
+
+
+// ---------------------------------
+// CREATE SYSTEM HELP IMAGE
+// ---------------------------------
+async function createSystemHelpImage(
+  articleId,
+  adminId,
+  file
+) {
+
+  const article =
+    await repository
+      .getArticleById(
+        articleId
+      );
+
+
+  if (!article) {
+
+    const error =
+      new Error(
+        "Help article not found."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_ARTICLE_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  const originalFilename =
+    String(
+      file.originalFilename || ""
+    ).trim();
+
+
+  if (!originalFilename) {
+
+    const error =
+      new Error(
+        "Image filename is required."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_MEDIA_FILENAME_REQUIRED";
+
+    throw error;
+  }
+
+
+  const contentType =
+    String(
+      file.contentType || ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  const allowedTypes =
+    new Set([
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif"
+    ]);
+
+
+  if (!allowedTypes.has(contentType)) {
+
+    const error =
+      new Error(
+        "Help image must be PNG, JPEG, WEBP, or GIF."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_IMAGE_TYPE_INVALID";
+
+    throw error;
+  }
+
+
+  const fileSizeBytes =
+    Number(
+      file.fileSizeBytes || 0
+    );
+
+
+  if (
+    !Number.isFinite(
+      fileSizeBytes
+    ) ||
+    fileSizeBytes <= 0
+  ) {
+
+    const error =
+      new Error(
+        "Help image is empty."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_IMAGE_EMPTY";
+
+    throw error;
+  }
+
+
+  const mediaId =
+    crypto.randomUUID();
+
+
+  const safeFilename =
+    sanitizeMediaFilename(
+      originalFilename
+    );
+
+
+  const storageKey =
+    `help/system/images/${mediaId}___${safeFilename}`;
+
+
+  const storage =
+    storageFactory
+      .getStorageProvider();
+
+
+  const storageProvider =
+    String(
+      process.env
+        .ATTACHMENT_STORAGE_PROVIDER ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  await storage.put(
+    storageKey,
+    file.source,
+    {
+      contentType,
+      contentLength:
+        fileSizeBytes
+    }
+  );
+
+
+  try {
+
+    return await repository
+      .createSystemMedia({
+        id:
+          mediaId,
+
+        articleId,
+
+        mediaType:
+          "IMAGE",
+
+        originalFilename,
+
+        storageProvider,
+
+        storageKey,
+
+        contentType,
+
+        fileSizeBytes,
+
+        altText:
+          file.altText || null,
+
+        caption:
+          file.caption || null,
+
+        adminId
+      });
+
+  } catch (error) {
+
+    // If the DB write fails after S3/local
+    // succeeds, remove the physical file.
+    try {
+
+      await storage.remove(
+        storageKey
+      );
+
+    } catch (cleanupError) {
+
+      console.error(
+        "Unable to clean up Help media after database failure.",
+        cleanupError
+      );
+    }
+
+
+    throw error;
+  }
+}
+
+
+// ---------------------------------
+// OPEN SYSTEM HELP MEDIA
+// ---------------------------------
+async function openSystemHelpMedia(
+  mediaId
+) {
+
+  const media =
+    await repository
+      .getSystemMediaById(
+        mediaId
+      );
+
+
+  if (!media) {
+
+    const error =
+      new Error(
+        "Help media not found."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_MEDIA_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  const storage =
+    storageFactory
+      .getStorageProviderByName(
+        media.storage_provider
+      );
+
+
+  const result =
+    await storage.open(
+      media.storage_key
+    );
+
+
+  return {
+    media,
+    result
+  };
 }
 
 module.exports = {
@@ -594,5 +1093,8 @@ module.exports = {
   createSystemContent,
   createDraftFromPublished,
   updateSystemContent,
-  publishSystemContent
+  publishSystemContent,
+
+  createSystemHelpImage,
+  openSystemHelpMedia
 };
