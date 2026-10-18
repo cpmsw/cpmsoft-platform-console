@@ -6,6 +6,12 @@ const bcrypt =
 
 const QRCode = require("qrcode");
 
+const {
+  sendEmail
+} = require(
+  "cpmsoft-core/common/services/emailService"
+);
+
 async function loadOtplib() {
   return import("otplib");
 }
@@ -518,6 +524,283 @@ module.exports =
 
               error:
                 "Unable to verify authentication code."
+            });
+        }
+      }
+    );
+
+
+    // ---------------------------------
+    // SEND RESET CODE
+    // ---------------------------------
+    fastify.post(
+      "/send-reset-code",
+      {
+        schema: {
+          summary:
+            "Send Platform administrator password reset code",
+
+          tags: [
+            "Authentication"
+          ],
+
+          body: {
+            type: "object",
+
+            required: [
+              "email"
+            ],
+
+            additionalProperties: false,
+
+            properties: {
+              email: {
+                type: "string"
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        const email =
+          request.body.email
+            .trim()
+            .toLowerCase();
+
+        try {
+
+          const admin =
+            await service.getAdminForPasswordReset(
+              email
+            );
+
+
+          if (!admin) {
+
+            return {
+              message:
+                "If the email exists, a reset code has been sent."
+            };
+          }
+
+
+          const resetCode =
+            Math.floor(
+              100000 +
+              Math.random() * 900000
+            ).toString();
+
+
+          const expires =
+            new Date();
+
+          expires.setMinutes(
+            expires.getMinutes() + 10
+          );
+
+
+          await service.setPasswordResetCode(
+            admin.id,
+            resetCode,
+            expires
+          );
+          await sendEmail({
+            to: email,
+
+            subject:
+              "CPMSOFT Platform Console Password Reset Code",
+
+            text:
+              `Your CPMSOFT Platform Console password reset code is: ${resetCode}. ` +
+              `This code expires in 10 minutes.`,
+
+            html:
+              `<p>Your CPMSOFT Platform Console password reset code is:</p>
+           <h2>${resetCode}</h2>
+           <p>This code expires in 10 minutes.</p>`
+          });
+
+
+          return {
+            message:
+              "If the email exists, a reset code has been sent."
+          };
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(500)
+            .send({
+              code:
+                "RESET_CODE_SEND_FAILED",
+
+              error:
+                "Unable to send reset code."
+            });
+        }
+      }
+    );
+
+    // ---------------------------------
+    // RESET PASSWORD WITH CODE
+    // ---------------------------------
+    fastify.post(
+      "/reset-password-code",
+      {
+        schema: {
+          summary:
+            "Reset Platform administrator password using code",
+
+          tags: [
+            "Authentication"
+          ],
+
+          body: {
+            type: "object",
+
+            required: [
+              "email",
+              "code",
+              "newPassword"
+            ],
+
+            additionalProperties: false,
+
+            properties: {
+              email: {
+                type: "string"
+              },
+
+              code: {
+                type: "string"
+              },
+
+              newPassword: {
+                type: "string"
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        const email =
+          request.body.email
+            .trim()
+            .toLowerCase();
+
+        const code =
+          String(
+            request.body.code || ""
+          ).trim();
+
+        const {
+          newPassword
+        } = request.body;
+
+
+        const passwordError =
+          service.validatePassword(
+            newPassword
+          );
+
+        if (passwordError) {
+          return reply
+            .code(400)
+            .send({
+              code:
+                "PASSWORD_POLICY_FAILED",
+
+              error:
+                passwordError
+            });
+        }
+
+
+        try {
+
+          const admin =
+            await service.getAdminForPasswordReset(
+              email
+            );
+
+
+          if (!admin) {
+            return reply
+              .code(400)
+              .send({
+                error:
+                  "Invalid code or email."
+              });
+          }
+
+
+          if (
+            !admin.reset_code ||
+            admin.reset_code !== code
+          ) {
+            return reply
+              .code(400)
+              .send({
+                error:
+                  "Invalid code or email."
+              });
+          }
+
+
+          if (
+            !admin.reset_code_expires ||
+            new Date(
+              admin.reset_code_expires
+            ) < new Date()
+          ) {
+            return reply
+              .code(400)
+              .send({
+                error:
+                  "Reset code expired."
+              });
+          }
+
+
+          const newPasswordHash =
+            await bcrypt.hash(
+              newPassword,
+              12
+            );
+
+
+          await service.updatePassword(
+            admin.id,
+            newPasswordHash
+          );
+
+          await service.clearPasswordResetCode(
+            admin.id
+          );
+
+          return {
+            message:
+              "Password updated successfully."
+          };
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(500)
+            .send({
+              code:
+                "PASSWORD_RESET_FAILED",
+
+              error:
+                "Unable to reset password."
             });
         }
       }

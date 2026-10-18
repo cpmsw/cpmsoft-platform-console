@@ -201,6 +201,60 @@ async function updatePassword(
   return result.rows[0] || null;
 }
 
+
+async function getAdminForPasswordReset(
+  email
+) {
+  const result =
+    await authDb.query(
+      `SELECT
+         id,
+         display_name,
+         reset_code,
+         reset_code_expires
+       FROM platform_admins
+       WHERE LOWER(email) = LOWER($1)
+         AND is_active = true`,
+      [email]
+    );
+
+  return result.rows[0] || null;
+}
+
+
+async function setPasswordResetCode(
+  adminId,
+  resetCode,
+  expires
+) {
+  await authDb.query(
+    `UPDATE platform_admins
+     SET reset_code = $2,
+         reset_code_expires = $3,
+         updated_at = now()
+     WHERE id = $1`,
+    [
+      adminId,
+      resetCode,
+      expires
+    ]
+  );
+}
+
+
+async function clearPasswordResetCode(
+  adminId
+) {
+  await authDb.query(
+    `UPDATE platform_admins
+     SET reset_code = NULL,
+         reset_code_expires = NULL,
+         updated_at = now()
+     WHERE id = $1`,
+    [adminId]
+  );
+}
+
 function validatePassword(password) {
 
   if (
@@ -231,6 +285,9 @@ function validatePassword(password) {
 
 module.exports = {
   getAdminByEmail,
+  getAdminForPasswordReset,
+  setPasswordResetCode,
+  clearPasswordResetCode,
   getAdminById,
   verifyPassword,
   updatePassword,
