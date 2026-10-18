@@ -11,8 +11,10 @@ async function getAdminByEmail(email) {
       `SELECT
          id,
          email,
-         display_name,
-         password_hash,
+          display_name,
+          theme_mode,
+          accent_theme,
+          password_hash,
          twofa_secret,
          twofa_enabled,
          is_active,
@@ -107,8 +109,10 @@ async function getAdminById(adminId) {
       `SELECT
          id,
          email,
-         display_name,
-         password_hash,
+          display_name,
+          theme_mode,
+          accent_theme,
+          password_hash,
          twofa_secret,
          twofa_enabled,
          is_active,
@@ -152,13 +156,89 @@ async function recordSuccessfulLogin(
   );
 }
 
+async function updateTheme(
+  adminId,
+  themeMode,
+  accentTheme
+) {
+  const result =
+    await authDb.query(
+      `UPDATE platform_admins
+       SET theme_mode = $2,
+           accent_theme = $3,
+           updated_at = now()
+       WHERE id = $1
+       RETURNING
+         theme_mode,
+         accent_theme`,
+      [
+        adminId,
+        themeMode,
+        accentTheme
+      ]
+    );
+
+  return result.rows[0] || null;
+}
+
+async function updatePassword(
+  adminId,
+  passwordHash
+) {
+  const result =
+    await authDb.query(
+      `UPDATE platform_admins
+       SET password_hash = $2,
+           updated_at = now()
+       WHERE id = $1
+       RETURNING id`,
+      [
+        adminId,
+        passwordHash
+      ]
+    );
+
+  return result.rows[0] || null;
+}
+
+function validatePassword(password) {
+
+  if (
+    !password ||
+    password.length < 8
+  ) {
+    return "Password must be at least 8 characters.";
+  }
+
+  if (!/[A-Z]/.test(password)) {
+    return "Password must contain at least one uppercase letter.";
+  }
+
+  if (!/[a-z]/.test(password)) {
+    return "Password must contain at least one lowercase letter.";
+  }
+
+  if (!/\d/.test(password)) {
+    return "Password must contain at least one number.";
+  }
+
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    return "Password must contain at least one special character.";
+  }
+
+  return null;
+}
+
 module.exports = {
   getAdminByEmail,
   getAdminById,
   verifyPassword,
+  updatePassword,
+  validatePassword,
   recordFailedLogin,
   clearFailedLogin,
   saveTwoFactorSecret,
   enableTwoFactor,
-  recordSuccessfulLogin
+  recordSuccessfulLogin,
+  updateTheme
 };

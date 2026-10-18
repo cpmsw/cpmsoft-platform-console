@@ -1,5 +1,9 @@
 const service =
   require("./auth.service");
+
+const bcrypt =
+  require("bcryptjs");
+
 const QRCode = require("qrcode");
 
 async function loadOtplib() {
@@ -586,7 +590,13 @@ module.exports =
                 admin.email,
 
               displayName:
-                admin.display_name
+                admin.display_name,
+
+              themeMode:
+                admin.theme_mode,
+
+              accentTheme:
+                admin.accent_theme
             }
           };
 
@@ -607,11 +617,268 @@ module.exports =
 
 
     // ---------------------------------
-    // LOGOUT
+    // UPDATE THEME PREFERENCE
     // ---------------------------------
+    fastify.put(
+      "/theme",
+      {
+        schema: {
+          tags: ["Authentication"],
+          summary:
+            "Update Platform administrator theme preference",
+
+          body: {
+            type: "object",
+            required: [
+              "themeMode",
+              "accentTheme"
+            ],
+            additionalProperties: false,
+
+            properties: {
+              themeMode: {
+                type: "string",
+                enum: [
+                  "light",
+                  "dark"
+                ]
+              },
+
+              accentTheme: {
+                type: "string",
+                enum: [
+                  "blue",
+                  "amber",
+                  "teal"
+                ]
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        try {
+
+          await request.jwtVerify();
+
+          if (
+            request.user?.stage !==
+            "authenticated" ||
+            request.user?.role !==
+            "platform_admin"
+          ) {
+            return reply
+              .code(401)
+              .send({
+                code:
+                  "PLATFORM_AUTH_REQUIRED",
+
+                error:
+                  "Platform administrator authentication is required."
+              });
+          }
+
+          const {
+            themeMode,
+            accentTheme
+          } = request.body;
+
+          const theme =
+            await service.updateTheme(
+              request.user.adminId,
+              themeMode,
+              accentTheme
+            );
+
+          if (!theme) {
+            return reply
+              .code(404)
+              .send({
+                code:
+                  "PLATFORM_ADMIN_NOT_FOUND",
+
+                error:
+                  "Platform administrator not found."
+              });
+          }
+
+          return {
+            success: true,
+
+            themeMode:
+              theme.theme_mode,
+
+            accentTheme:
+              theme.accent_theme
+          };
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(500)
+            .send({
+              code:
+                "THEME_UPDATE_FAILED",
+
+              error:
+                "Unable to update theme preference."
+            });
+        }
+      }
+    );
+
     // ---------------------------------
-    // LOGOUT
+    // CHANGE PASSWORD
     // ---------------------------------
+    fastify.post(
+      "/change-password",
+      {
+        schema: {
+          tags: ["Authentication"],
+          summary:
+            "Change Platform administrator password",
+
+          body: {
+            type: "object",
+
+            required: [
+              "currentPassword",
+              "newPassword"
+            ],
+
+            additionalProperties: false,
+
+            properties: {
+              currentPassword: {
+                type: "string",
+                minLength: 1
+              },
+
+              newPassword: {
+                type: "string",
+                minLength: 1
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        try {
+
+          await request.jwtVerify();
+
+          if (
+            request.user?.stage !==
+            "authenticated" ||
+            request.user?.role !==
+            "platform_admin"
+          ) {
+            return reply
+              .code(401)
+              .send({
+                code:
+                  "PLATFORM_AUTH_REQUIRED",
+
+                error:
+                  "Platform administrator authentication is required."
+              });
+          }
+
+          const {
+            currentPassword,
+            newPassword
+          } = request.body;
+
+          const passwordError =
+            service.validatePassword(
+              newPassword
+            );
+
+          if (passwordError) {
+            return reply
+              .code(400)
+              .send({
+                code:
+                  "PASSWORD_POLICY_FAILED",
+
+                error:
+                  passwordError
+              });
+          }
+
+          const admin =
+            await service.getAdminById(
+              request.user.adminId
+            );
+
+          if (!admin) {
+            return reply
+              .code(404)
+              .send({
+                code:
+                  "PLATFORM_ADMIN_NOT_FOUND",
+
+                error:
+                  "Platform administrator not found."
+              });
+          }
+
+          const currentPasswordValid =
+            await service.verifyPassword(
+              currentPassword,
+              admin.password_hash
+            );
+
+          if (!currentPasswordValid) {
+            return reply
+              .code(400)
+              .send({
+                code:
+                  "CURRENT_PASSWORD_INVALID",
+
+                error:
+                  "Current password is incorrect."
+              });
+          }
+
+          const newPasswordHash =
+            await bcrypt.hash(
+              newPassword,
+              12
+            );
+
+          await service.updatePassword(
+            admin.id,
+            newPasswordHash
+          );
+
+          return {
+            success: true
+          };
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(500)
+            .send({
+              code:
+                "PASSWORD_CHANGE_FAILED",
+
+              error:
+                "Unable to change password."
+            });
+        }
+      }
+    );
+
     // ---------------------------------
     // LOGOUT
     // ---------------------------------
