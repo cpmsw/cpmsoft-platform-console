@@ -197,6 +197,11 @@ fastify.register(swagger, {
         description: "CPMSOFT commercial package catalog"
       },
       {
+        name: "Platform Admins",
+        description:
+          "Platform administrator management"
+      },
+      {
         name: "Authentication",
         description:
           "Platform administrator authentication"

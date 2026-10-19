@@ -46,7 +46,7 @@ module.exports = async function (fastify) {
     }
   );
 
-    // ---------------------------------
+  // ---------------------------------
   // GET ADMIN RESOURCE LIST
   // ---------------------------------
   fastify.get(
@@ -54,30 +54,150 @@ module.exports = async function (fastify) {
     {
       schema: {
         tags: ["Resources"],
-        summary: "Get all resources for administration",
+
+        summary:
+          "Get resources for administration",
+
         description:
-          "Returns active and inactive resources for Platform Console maintenance."
+          "Returns up to 100 resources matching the search and status filters.",
+
+        querystring: {
+          type: "object",
+
+          additionalProperties: false,
+
+          properties: {
+            search: {
+              type: "string"
+            },
+
+            status: {
+              type: "string",
+              enum: [
+                "active",
+                "inactive",
+                "all"
+              ]
+            }
+          }
+        }
       }
     },
+
     async (request, reply) => {
+
       try {
-        return await service.getResourcesAdmin();
+
+        return await service
+          .getResourcesAdmin({
+            search:
+              request.query.search || "",
+
+            status:
+              request.query.status ||
+              "active"
+          });
 
       } catch (error) {
-        request.log.error(error);
+
+        request.log.error(
+          error
+        );
 
         return reply
-          .code(error.statusCode || 500)
+          .code(
+            error.statusCode ||
+            500
+          )
           .send({
             code:
               error.code ||
               "RESOURCE_ADMIN_LOAD_FAILED",
-            error: error.message
+
+            error:
+              error.message
           });
       }
     }
   );
 
+  // ---------------------------------
+  // GET ADMIN RESOURCE COUNT
+  // ---------------------------------
+  fastify.get(
+    "/admin/count",
+    {
+      schema: {
+        tags: ["Resources"],
+
+        summary:
+          "Count resources for administration",
+
+        querystring: {
+          type: "object",
+
+          additionalProperties: false,
+
+          properties: {
+            search: {
+              type: "string"
+            },
+
+            status: {
+              type: "string",
+              enum: [
+                "active",
+                "inactive",
+                "all"
+              ]
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const count =
+          await service
+            .countResourcesAdmin({
+              search:
+                request.query.search || "",
+
+              status:
+                request.query.status ||
+                "active"
+            });
+
+
+        return {
+          count
+        };
+
+      } catch (error) {
+
+        request.log.error(
+          error
+        );
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "RESOURCE_ADMIN_COUNT_FAILED",
+
+            error:
+              error.message
+          });
+      }
+    }
+  );
 
   // ---------------------------------
   // GET RESOURCE BY ID

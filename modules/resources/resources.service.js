@@ -219,28 +219,138 @@ async function saveTenantResources(
 // ---------------------------------
 // ADMIN RESOURCE LIST
 // ---------------------------------
-async function getResourcesAdmin() {
-  const result = await authDb.query(
-    `SELECT
-       id,
-       resource_key,
-       resource_name,
-       category,
-       description,
-       is_active,
-       display_order,
-       created_at,
-       updated_at
-     FROM resources
-     ORDER BY
-       category,
-       display_order,
-       resource_name`
-  );
+async function getResourcesAdmin({
+  search = "",
+  status = "active"
+} = {}) {
+
+  const values = [];
+  const where = [];
+
+
+  if (search.trim()) {
+
+    values.push(
+      `%${search.trim()}%`
+    );
+
+    where.push(
+      `(resource_name ILIKE $${values.length}
+        OR resource_key ILIKE $${values.length}
+        OR category ILIKE $${values.length}
+        OR description ILIKE $${values.length})`
+    );
+  }
+
+
+  if (status === "active") {
+
+    where.push(
+      "is_active = true"
+    );
+
+  } else if (
+    status === "inactive"
+  ) {
+
+    where.push(
+      "is_active = false"
+    );
+  }
+
+
+  const whereSql =
+    where.length
+      ? `WHERE ${where.join(" AND ")}`
+      : "";
+
+
+  const result =
+    await authDb.query(
+      `SELECT
+         id,
+         resource_key,
+         resource_name,
+         category,
+         description,
+         is_active,
+         display_order,
+         created_at,
+         updated_at
+       FROM resources
+       ${whereSql}
+       ORDER BY
+         category,
+         display_order,
+         resource_name
+       LIMIT 100`,
+      values
+    );
+
 
   return result.rows;
 }
 
+// ---------------------------------
+// ADMIN RESOURCE COUNT
+// ---------------------------------
+async function countResourcesAdmin({
+  search = "",
+  status = "active"
+} = {}) {
+
+  const values = [];
+  const where = [];
+
+
+  if (search.trim()) {
+
+    values.push(
+      `%${search.trim()}%`
+    );
+
+    where.push(
+      `(resource_name ILIKE $${values.length}
+        OR resource_key ILIKE $${values.length}
+        OR category ILIKE $${values.length}
+        OR description ILIKE $${values.length})`
+    );
+  }
+
+
+  if (status === "active") {
+
+    where.push(
+      "is_active = true"
+    );
+
+  } else if (
+    status === "inactive"
+  ) {
+
+    where.push(
+      "is_active = false"
+    );
+  }
+
+
+  const whereSql =
+    where.length
+      ? `WHERE ${where.join(" AND ")}`
+      : "";
+
+
+  const result =
+    await authDb.query(
+      `SELECT COUNT(*)::int AS count
+       FROM resources
+       ${whereSql}`,
+      values
+    );
+
+
+  return result.rows[0]?.count || 0;
+}
 
 // ---------------------------------
 // GET RESOURCE
@@ -396,6 +506,7 @@ async function setResourceActive(id, isActive) {
 module.exports = {
   getResources,
   getResourcesAdmin,
+  countResourcesAdmin,
   getResourceById,
   createResource,
   updateResource,

@@ -29,19 +29,171 @@ const tenantDetailsService =
 
 module.exports = async function (fastify) {
 
+  // ---------------------------------
   // GET TENANTS
-  fastify.get('/', async (request, reply) => {
-    try {
-      const { search } = request.query;
-      return await service.getTenants(search);
-    } catch (error) {
-      request.log.error(error);
-      return reply.code(error.statusCode || 500).send({
-        error: error.message
-      });
-    }
-  });
+  // ---------------------------------
+  fastify.get(
+    "/",
+    {
+      schema: {
+        tags: [
+          "Tenants"
+        ],
 
+        summary:
+          "Search Tenants",
+
+        querystring: {
+          type: "object",
+
+          properties: {
+
+            search: {
+              type: "string",
+              default: ""
+            },
+
+            lifecycle: {
+              type: "string",
+              enum: [
+                "live",
+                "pending",
+                "awaiting",
+                "all"
+              ],
+              default: "live"
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const {
+          search = "",
+          lifecycle = "live"
+        } = request.query;
+
+
+        return await service
+          .getTenants({
+            search,
+            lifecycle
+          });
+
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_SEARCH_FAILED",
+
+            message:
+              error.message ||
+              "Unable to load Tenants."
+          });
+      }
+    }
+  );
+
+  // ---------------------------------
+  // COUNT TENANTS
+  // ---------------------------------
+  fastify.get(
+    "/count",
+    {
+      schema: {
+        tags: [
+          "Tenants"
+        ],
+
+        summary:
+          "Count Tenants",
+
+        querystring: {
+          type: "object",
+
+          properties: {
+
+            search: {
+              type: "string",
+              default: ""
+            },
+
+            lifecycle: {
+              type: "string",
+              enum: [
+                "live",
+                "pending",
+                "awaiting",
+                "all"
+              ],
+              default: "live"
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const {
+          search = "",
+          lifecycle = "live"
+        } = request.query;
+
+
+        const count =
+          await service
+            .countTenants({
+              search,
+              lifecycle
+            });
+
+
+        return {
+          count
+        };
+
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "TENANT_COUNT_FAILED",
+
+            message:
+              error.message ||
+              "Unable to count Tenants."
+          });
+      }
+    }
+  );
 
   // -----------------------------
   // TENANT PURGE PREVIEW

@@ -111,26 +111,137 @@ async function getPackages() {
 // ---------------------------------
 // ADMIN PACKAGE LIST
 // ---------------------------------
-async function getPackagesAdmin() {
-  const result = await authDb.query(
-    `SELECT
-       id,
-       package_key,
-       package_name,
-       description,
-       is_active,
-       display_order,
-       created_at,
-       updated_at
-     FROM packages
-     ORDER BY
-       display_order,
-       package_name`
-  );
+// ---------------------------------
+// ADMIN PACKAGE LIST
+// ---------------------------------
+async function getPackagesAdmin({
+  search = "",
+  status = "active"
+} = {}) {
+
+  const values = [];
+  const where = [];
+
+
+  if (search.trim()) {
+
+    values.push(
+      `%${search.trim()}%`
+    );
+
+    where.push(
+      `(package_name ILIKE $${values.length}
+        OR package_key ILIKE $${values.length}
+        OR description ILIKE $${values.length})`
+    );
+  }
+
+
+  if (status === "active") {
+
+    where.push(
+      "is_active = true"
+    );
+
+  } else if (
+    status === "inactive"
+  ) {
+
+    where.push(
+      "is_active = false"
+    );
+  }
+
+
+  const whereSql =
+    where.length
+      ? `WHERE ${where.join(" AND ")}`
+      : "";
+
+
+  const result =
+    await authDb.query(
+      `SELECT
+         id,
+         package_key,
+         package_name,
+         description,
+         is_active,
+         display_order,
+         created_at,
+         updated_at
+       FROM packages
+       ${whereSql}
+       ORDER BY
+         display_order,
+         package_name
+       LIMIT 100`,
+      values
+    );
+
 
   return result.rows;
 }
 
+// ---------------------------------
+// ADMIN PACKAGE COUNT
+// ---------------------------------
+async function countPackagesAdmin({
+  search = "",
+  status = "active"
+} = {}) {
+
+  const values = [];
+  const where = [];
+
+
+  if (search.trim()) {
+
+    values.push(
+      `%${search.trim()}%`
+    );
+
+    where.push(
+      `(package_name ILIKE $${values.length}
+        OR package_key ILIKE $${values.length}
+        OR description ILIKE $${values.length})`
+    );
+  }
+
+
+  if (status === "active") {
+
+    where.push(
+      "is_active = true"
+    );
+
+  } else if (
+    status === "inactive"
+  ) {
+
+    where.push(
+      "is_active = false"
+    );
+  }
+
+
+  const whereSql =
+    where.length
+      ? `WHERE ${where.join(" AND ")}`
+      : "";
+
+
+  const result =
+    await authDb.query(
+      `SELECT COUNT(*)::int AS count
+       FROM packages
+       ${whereSql}`,
+      values
+    );
+
+
+  return result.rows[0]?.count || 0;
+}
 
 // ---------------------------------
 // GET PACKAGE BY ID
@@ -535,6 +646,7 @@ async function savePackageResources(
 module.exports = {
   getPackages,
   getPackagesAdmin,
+  countPackagesAdmin,
   getPackageById,
   createPackage,
   updatePackage,

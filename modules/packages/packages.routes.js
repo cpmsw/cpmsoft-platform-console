@@ -54,6 +54,8 @@ module.exports =
         }
       }
     );
+
+
     // ---------------------------------
     // GET ADMIN PACKAGE LIST
     // ---------------------------------
@@ -62,29 +64,150 @@ module.exports =
       {
         schema: {
           tags: ["Packages"],
-          summary: "Get all packages for administration",
+
+          summary:
+            "Get packages for administration",
+
           description:
-            "Returns active and inactive packages for Platform Console maintenance."
+            "Returns up to 100 packages matching the search and status filters.",
+
+          querystring: {
+            type: "object",
+
+            additionalProperties: false,
+
+            properties: {
+              search: {
+                type: "string"
+              },
+
+              status: {
+                type: "string",
+                enum: [
+                  "active",
+                  "inactive",
+                  "all"
+                ]
+              }
+            }
+          }
         }
       },
+
       async (request, reply) => {
+
         try {
-          return await service.getPackagesAdmin();
+
+          return await service
+            .getPackagesAdmin({
+              search:
+                request.query.search || "",
+
+              status:
+                request.query.status ||
+                "active"
+            });
+
         } catch (error) {
-          request.log.error(error);
+
+          request.log.error(
+            error
+          );
 
           return reply
-            .code(error.statusCode || 500)
+            .code(
+              error.statusCode ||
+              500
+            )
             .send({
               code:
                 error.code ||
                 "PACKAGE_ADMIN_LOAD_FAILED",
-              error: error.message
+
+              error:
+                error.message
             });
         }
       }
     );
 
+    // ---------------------------------
+    // GET ADMIN PACKAGE COUNT
+    // ---------------------------------
+    fastify.get(
+      "/admin/count",
+      {
+        schema: {
+          tags: ["Packages"],
+
+          summary:
+            "Count packages for administration",
+
+          querystring: {
+            type: "object",
+
+            additionalProperties: false,
+
+            properties: {
+              search: {
+                type: "string"
+              },
+
+              status: {
+                type: "string",
+                enum: [
+                  "active",
+                  "inactive",
+                  "all"
+                ]
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        try {
+
+          const count =
+            await service
+              .countPackagesAdmin({
+                search:
+                  request.query.search || "",
+
+                status:
+                  request.query.status ||
+                  "active"
+              });
+
+
+          return {
+            count
+          };
+
+        } catch (error) {
+
+          request.log.error(
+            error
+          );
+
+          return reply
+            .code(
+              error.statusCode ||
+              500
+            )
+            .send({
+              code:
+                error.code ||
+                "PACKAGE_ADMIN_COUNT_FAILED",
+
+              error:
+                error.message
+            });
+        }
+      }
+    );
 
     // ---------------------------------
     // GET PACKAGE BY ID
