@@ -4,6 +4,9 @@ const service =
 const bcrypt =
   require("bcryptjs");
 
+const crypto =
+  require("crypto");
+
 const QRCode = require("qrcode");
 
 const {
@@ -97,6 +100,21 @@ module.exports =
               });
           }
 
+          if (
+            !admin.is_verified ||
+            !admin.password_hash
+          ) {
+
+            return reply
+              .code(403)
+              .send({
+                code:
+                  "ACCOUNT_NOT_ACTIVATED",
+
+                error:
+                  "Your Platform Console account has not been activated."
+              });
+          }
 
           if (
             admin.locked_until &&
@@ -529,6 +547,461 @@ module.exports =
       }
     );
 
+    // ---------------------------------
+    // VALIDATE ACTIVATION INVITATION
+    // ---------------------------------
+    fastify.post(
+      "/activation/validate",
+      {
+        schema: {
+          tags: ["Authentication"],
+          summary:
+            "Validate Platform administrator activation invitation",
+
+          body: {
+            type: "object",
+            required: [
+              "token"
+            ],
+            additionalProperties: false,
+
+            properties: {
+              token: {
+                type: "string",
+                minLength: 1
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        try {
+
+          const token =
+            String(
+              request.body.token || ""
+            ).trim();
+
+
+          const tokenHash =
+            crypto
+              .createHash("sha256")
+              .update(token)
+              .digest("hex");
+
+
+          const admin =
+            await service
+              .getAdminByInvitationTokenHash(
+                tokenHash
+              );
+
+
+          if (
+            !admin ||
+            !admin.is_active ||
+            admin.is_verified ||
+            !admin.activation_invitation_expires_at ||
+            new Date(
+              admin.activation_invitation_expires_at
+            ) < new Date()
+          ) {
+
+            return reply
+              .code(400)
+              .send({
+                code:
+                  "INVALID_ACTIVATION_INVITATION",
+
+                error:
+                  "This activation invitation is invalid or has expired."
+              });
+          }
+
+
+          return {
+            valid: true,
+
+            email:
+              admin.email,
+
+            displayName:
+              admin.display_name,
+
+            twoFactorRequired:
+              admin.twofa_enabled
+          };
+
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(500)
+            .send({
+              code:
+                "ACTIVATION_VALIDATION_FAILED",
+
+              error:
+                "Unable to validate activation invitation."
+            });
+        }
+      }
+    );
+
+
+    // ---------------------------------
+    // SEND ACTIVATION VERIFICATION CODE
+    // ---------------------------------
+    fastify.post(
+      "/activation/send-code",
+      {
+        schema: {
+          tags: ["Authentication"],
+          summary:
+            "Send Platform administrator activation verification code",
+
+          body: {
+            type: "object",
+            required: [
+              "token"
+            ],
+            additionalProperties: false,
+
+            properties: {
+              token: {
+                type: "string",
+                minLength: 1
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        try {
+
+          const token =
+            String(
+              request.body.token || ""
+            ).trim();
+
+
+          const tokenHash =
+            crypto
+              .createHash("sha256")
+              .update(token)
+              .digest("hex");
+
+
+          const admin =
+            await service
+              .getAdminByInvitationTokenHash(
+                tokenHash
+              );
+
+
+          if (
+            !admin ||
+            !admin.is_active ||
+            admin.is_verified ||
+            !admin.activation_invitation_expires_at ||
+            new Date(
+              admin.activation_invitation_expires_at
+            ) < new Date()
+          ) {
+
+            return reply
+              .code(400)
+              .send({
+                code:
+                  "INVALID_ACTIVATION_INVITATION",
+
+                error:
+                  "This activation invitation is invalid or has expired."
+              });
+          }
+
+
+          const verificationCode =
+            crypto
+              .randomInt(
+                100000,
+                1000000
+              )
+              .toString();
+
+
+          const expires =
+            new Date(
+              Date.now() +
+              15 * 60 * 1000
+            );
+
+
+          await service
+            .setActivationVerificationCode(
+              admin.id,
+              verificationCode,
+              expires
+            );
+
+
+          await sendEmail({
+            to:
+              admin.email,
+
+            subject:
+              "CPMSOFT Platform Console Verification Code",
+
+            text:
+              `Your CPMSOFT Platform Console verification code is: ${verificationCode}. ` +
+              `This code expires in 15 minutes.`,
+
+            html:
+              `<p>Your CPMSOFT Platform Console verification code is:</p>
+               <h2>${verificationCode}</h2>
+               <p>This code expires in 15 minutes.</p>`
+          });
+
+
+          return {
+            success: true,
+
+            message:
+              "Verification code sent."
+          };
+
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(500)
+            .send({
+              code:
+                "ACTIVATION_CODE_SEND_FAILED",
+
+              error:
+                "Unable to send activation verification code."
+            });
+        }
+      }
+    );
+
+
+    // ---------------------------------
+    // COMPLETE ACTIVATION
+    // ---------------------------------
+    fastify.post(
+      "/activation/complete",
+      {
+        schema: {
+          tags: ["Authentication"],
+          summary:
+            "Complete Platform administrator activation",
+
+          body: {
+            type: "object",
+
+            required: [
+              "token",
+              "code",
+              "newPassword"
+            ],
+
+            additionalProperties: false,
+
+            properties: {
+              token: {
+                type: "string",
+                minLength: 1
+              },
+
+              code: {
+                type: "string",
+                minLength: 6,
+                maxLength: 6
+              },
+
+              newPassword: {
+                type: "string",
+                minLength: 1
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        const token =
+          String(
+            request.body.token || ""
+          ).trim();
+
+        const code =
+          String(
+            request.body.code || ""
+          ).trim();
+
+        const {
+          newPassword
+        } = request.body;
+
+
+        const passwordError =
+          service.validatePassword(
+            newPassword
+          );
+
+
+        if (passwordError) {
+
+          return reply
+            .code(400)
+            .send({
+              code:
+                "PASSWORD_POLICY_FAILED",
+
+              error:
+                passwordError
+            });
+        }
+
+
+        try {
+
+          const tokenHash =
+            crypto
+              .createHash("sha256")
+              .update(token)
+              .digest("hex");
+
+
+          const admin =
+            await service
+              .getAdminByInvitationTokenHash(
+                tokenHash
+              );
+
+
+          if (
+            !admin ||
+            !admin.is_active ||
+            admin.is_verified ||
+            !admin.activation_invitation_expires_at ||
+            new Date(
+              admin.activation_invitation_expires_at
+            ) < new Date()
+          ) {
+
+            return reply
+              .code(400)
+              .send({
+                code:
+                  "INVALID_ACTIVATION_INVITATION",
+
+                error:
+                  "This activation invitation is invalid or has expired."
+              });
+          }
+
+
+          if (
+            !admin.verification_code ||
+            admin.verification_code !== code
+          ) {
+
+            return reply
+              .code(400)
+              .send({
+                code:
+                  "INVALID_VERIFICATION_CODE",
+
+                error:
+                  "Invalid verification code."
+              });
+          }
+
+
+          if (
+            !admin.verification_expires ||
+            new Date(
+              admin.verification_expires
+            ) < new Date()
+          ) {
+
+            return reply
+              .code(400)
+              .send({
+                code:
+                  "VERIFICATION_CODE_EXPIRED",
+
+                error:
+                  "Verification code has expired."
+              });
+          }
+
+
+          const passwordHash =
+            await bcrypt.hash(
+              newPassword,
+              12
+            );
+
+
+          const activatedAdmin =
+            await service
+              .activatePlatformAdmin(
+                admin.id,
+                passwordHash
+              );
+
+
+          if (!activatedAdmin) {
+
+            return reply
+              .code(409)
+              .send({
+                code:
+                  "ACTIVATION_FAILED",
+
+                error:
+                  "Unable to activate this Platform Console account."
+              });
+          }
+
+
+          return {
+            success: true,
+
+            message:
+              "Platform Console account activated successfully."
+          };
+
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(500)
+            .send({
+              code:
+                "ACTIVATION_FAILED",
+
+              error:
+                "Unable to activate Platform Console account."
+            });
+        }
+      }
+    );
 
     // ---------------------------------
     // SEND RESET CODE

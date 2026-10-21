@@ -58,6 +58,9 @@ module.exports = {
         PLATFORM_JWT_SECRET:
           process.env.PLATFORM_JWT_SECRET,
 
+        CPMSOFT_PLATFORM_ACTIVATION_URL:
+          process.env.CPMSOFT_PLATFORM_ACTIVATION_URL,
+
         SMTP_HOST:
           process.env.SMTP_HOST,
 

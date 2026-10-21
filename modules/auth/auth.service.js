@@ -18,6 +18,7 @@ async function getAdminByEmail(email) {
          twofa_secret,
          twofa_enabled,
          is_active,
+         is_verified,
          failed_login_attempts,
          locked_until,
          last_login_at
@@ -255,6 +256,135 @@ async function clearPasswordResetCode(
   );
 }
 
+// ---------------------------------
+// GET PLATFORM ADMIN BY
+// ACTIVATION INVITATION TOKEN
+// ---------------------------------
+async function getAdminByInvitationTokenHash(
+  tokenHash
+) {
+
+  const result =
+    await authDb.query(
+      `SELECT
+         id,
+         email,
+         display_name,
+         is_active,
+         is_verified,
+         twofa_enabled,
+         verification_code,
+         verification_expires,
+         activation_invitation_expires_at
+       FROM platform_admins
+       WHERE activation_invitation_token_hash = $1
+       LIMIT 1`,
+      [
+        tokenHash
+      ]
+    );
+
+
+  return result.rows[0] || null;
+}
+
+// ---------------------------------
+// SET ACTIVATION VERIFICATION CODE
+// ---------------------------------
+async function setActivationVerificationCode(
+  adminId,
+  verificationCode,
+  expires
+) {
+
+  await authDb.query(
+    `UPDATE platform_admins
+     SET
+       verification_code = $2,
+       verification_expires = $3,
+       updated_at = NOW()
+     WHERE id = $1`,
+    [
+      adminId,
+      verificationCode,
+      expires
+    ]
+  );
+}
+
+
+// ---------------------------------
+// ACTIVATE PLATFORM ADMIN
+// ---------------------------------
+async function activatePlatformAdmin(
+  adminId,
+  passwordHash
+) {
+
+  const client =
+    await authDb.connect();
+
+
+  try {
+
+    await client.query(
+      "BEGIN"
+    );
+
+
+    const result =
+      await client.query(
+        `UPDATE platform_admins
+         SET
+           password_hash = $2,
+           is_verified = true,
+           verified_at = NOW(),
+           verification_code = NULL,
+           verification_expires = NULL,
+           activation_invitation_token_hash = NULL,
+           activation_invitation_expires_at = NULL,
+           updated_at = NOW()
+         WHERE id = $1
+           AND is_active = true
+           AND is_verified = false
+         RETURNING
+           id,
+           email,
+           display_name,
+           is_active,
+           is_verified,
+           twofa_enabled,
+           verified_at`,
+        [
+          adminId,
+          passwordHash
+        ]
+      );
+
+
+    await client.query(
+      "COMMIT"
+    );
+
+
+    return result.rows[0] || null;
+
+
+  } catch (error) {
+
+    await client.query(
+      "ROLLBACK"
+    );
+
+    throw error;
+
+
+  } finally {
+
+    client.release();
+  }
+}
+
 function validatePassword(password) {
 
   if (
@@ -289,6 +419,11 @@ module.exports = {
   setPasswordResetCode,
   clearPasswordResetCode,
   getAdminById,
+
+  getAdminByInvitationTokenHash,
+  setActivationVerificationCode,
+  activatePlatformAdmin,
+
   verifyPassword,
   updatePassword,
   validatePassword,
