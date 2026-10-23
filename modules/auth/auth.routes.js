@@ -1333,7 +1333,10 @@ module.exports =
                   "Platform administrator authentication is required."
               });
           }
-
+          const screenAccess =
+            await service.getAdminScreenAccess(
+              admin.id
+            );
 
           return {
             authenticated: true,
@@ -1353,7 +1356,9 @@ module.exports =
 
               accentTheme:
                 admin.accent_theme
-            }
+            },
+
+            screenAccess
           };
 
         } catch {

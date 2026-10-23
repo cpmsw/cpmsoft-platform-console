@@ -413,6 +413,49 @@ function validatePassword(password) {
   return null;
 }
 
+// ---------------------------------
+// GET PLATFORM ADMIN SCREEN ACCESS
+// ---------------------------------
+async function getAdminScreenAccess(
+  adminId
+) {
+
+  const result =
+    await authDb.query(
+      `SELECT
+         ps.code,
+         COALESCE(
+           pasa.access_level,
+           'NONE'
+         ) AS access_level
+       FROM platform_screens ps
+       LEFT JOIN platform_admin_screen_access pasa
+         ON pasa.screen_id = ps.id
+        AND pasa.admin_id = $1
+       WHERE ps.is_active = true
+       ORDER BY
+         ps.sort_order,
+         ps.code`,
+      [
+        adminId
+      ]
+    );
+
+
+  const screenAccess = {};
+
+
+  for (const row of result.rows) {
+
+    screenAccess[row.code] =
+      row.access_level;
+  }
+
+
+  return screenAccess;
+}
+
+
 module.exports = {
   getAdminByEmail,
   getAdminForPasswordReset,
@@ -432,5 +475,6 @@ module.exports = {
   saveTwoFactorSecret,
   enableTwoFactor,
   recordSuccessfulLogin,
-  updateTheme
+  updateTheme,
+  getAdminScreenAccess
 };
