@@ -1,6 +1,12 @@
 const service =
   require("./resources.service");
 
+const {
+  requireScreenAccess
+} = require(
+  "../../common/security/requireScreenAccess"
+);
+
 module.exports = async function (fastify) {
 
 
@@ -10,6 +16,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "READ"
+        ),
       schema: {
         tags: ["Resources"],
         summary:
@@ -52,6 +63,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/admin",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "READ"
+        ),
       schema: {
         tags: ["Resources"],
 
@@ -127,6 +143,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/admin/count",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "READ"
+        ),
       schema: {
         tags: ["Resources"],
 
@@ -205,6 +226,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/:id",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "READ"
+        ),
       schema: {
         tags: ["Resources"],
         summary: "Get resource by ID",
@@ -249,6 +275,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "WRITE"
+        ),
       schema: {
         tags: ["Resources"],
         summary: "Create resource",
@@ -327,6 +358,11 @@ module.exports = async function (fastify) {
   fastify.put(
     "/:id",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "WRITE"
+        ),
       schema: {
         tags: ["Resources"],
         summary: "Update resource",
@@ -401,6 +437,11 @@ module.exports = async function (fastify) {
   fastify.patch(
     "/:id/active",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "WRITE"
+        ),
       schema: {
         tags: ["Resources"],
         summary: "Activate or deactivate resource",
@@ -457,6 +498,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/tenant/:tenantId",
     {
+      preHandler:
+  requireScreenAccess(
+    "tenants.tenants",
+    "READ"
+  ),
       schema: {
         tags: ["Resources"],
 
@@ -519,6 +565,11 @@ module.exports = async function (fastify) {
   fastify.put(
     "/tenant/:tenantId",
     {
+      preHandler:
+  requireScreenAccess(
+    "tenants.tenants",
+    "WRITE"
+  ),
       schema: {
         tags: ["Resources"],
 

@@ -1,6 +1,12 @@
 const service =
   require("./packages.service");
 
+const {
+  requireScreenAccess
+} = require(
+  "../../common/security/requireScreenAccess"
+);  
+
 
 module.exports =
   async function (fastify) {
@@ -12,6 +18,11 @@ module.exports =
     fastify.get(
       "/",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "READ"
+  ),
         schema: {
           tags: [
             "Packages",
@@ -62,6 +73,11 @@ module.exports =
     fastify.get(
       "/admin",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "READ"
+  ),
         schema: {
           tags: ["Packages"],
 
@@ -137,6 +153,11 @@ module.exports =
     fastify.get(
       "/admin/count",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "READ"
+  ),
         schema: {
           tags: ["Packages"],
 
@@ -215,6 +236,11 @@ module.exports =
     fastify.get(
       "/:id",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "READ"
+  ),
         schema: {
           tags: ["Packages"],
           summary: "Get package by ID",
@@ -258,6 +284,11 @@ module.exports =
     fastify.post(
       "/",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "WRITE"
+  ),
         schema: {
           tags: ["Packages"],
           summary: "Create package",
@@ -330,6 +361,11 @@ module.exports =
     fastify.put(
       "/:id",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "WRITE"
+  ),
         schema: {
           tags: ["Packages"],
           summary: "Update package",
@@ -398,6 +434,11 @@ module.exports =
     fastify.patch(
       "/:id/active",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "WRITE"
+  ),
         schema: {
           tags: ["Packages"],
           summary: "Activate or deactivate package",
@@ -454,6 +495,11 @@ module.exports =
     fastify.get(
       "/:id/resources",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "READ"
+  ),
         schema: {
           tags: ["Packages"],
           summary: "Get package resources",
@@ -497,6 +543,11 @@ module.exports =
     fastify.put(
       "/:id/resources",
       {
+        preHandler:
+  requireScreenAccess(
+    "cpmsoft.packages",
+    "WRITE"
+  ),
         schema: {
           tags: ["Packages"],
           summary: "Update package resources",

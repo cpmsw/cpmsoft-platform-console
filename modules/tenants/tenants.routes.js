@@ -12,6 +12,12 @@ const primaryContactService =
     "./tenants.primary-contact.service"
   );
 
+const {
+  requireScreenAccess
+} = require(
+  "../../common/security/requireScreenAccess"
+);
+
 const tenantEntitlementsService =
   require("./tenantEntitlements.service");
 
@@ -35,6 +41,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "READ"
+        ),
       schema: {
         tags: [
           "Tenants"
@@ -115,6 +126,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/count",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "READ"
+        ),
       schema: {
         tags: [
           "Tenants"
@@ -201,6 +217,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/:id/purge/count",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "READ"
+        ),
       schema: {
         params: {
           type: "object",
@@ -253,6 +274,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/:id/purge",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        ),
       schema: {
         params: {
           type: "object",
@@ -304,6 +330,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/onboard",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        ),
       schema: {
         tags: ["Tenants"],
 
@@ -516,6 +547,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/:id/activate",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        ),
       schema: {
         tags: ["Tenants"],
 
@@ -589,6 +625,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/:id/resend-activation",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        ),
       schema: {
         tags: ["Tenants"],
 
@@ -657,6 +698,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/:id/event-history",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "READ"
+        ),
       schema: {
         tags: ["Tenants"],
 
@@ -905,6 +951,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/:id/history",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "READ"
+        ),
       schema: {
         tags: ["Tenants"],
 
@@ -1004,6 +1055,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/:id/entitlements",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "READ"
+        ),
       schema: {
         tags: ["Tenants"],
 
@@ -1064,6 +1120,11 @@ module.exports = async function (fastify) {
   fastify.put(
     "/:id/entitlements",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        ),
       schema: {
         tags: ["Tenants"],
 
@@ -1188,20 +1249,69 @@ module.exports = async function (fastify) {
     }
   );
 
-  // REACTIVATE TENANT
-  fastify.put('/:id/reactivate', async (request, reply) => {
-    try {
-      return await service.reactivateTenant(
-        request.params.id,
-        request.user.adminId
-      );
-    } catch (error) {
-      request.log.error(error);
-      return reply.code(error.statusCode || 500).send({
-        error: error.message
-      });
+// ---------------------------------
+// REACTIVATE TENANT
+// ---------------------------------
+fastify.put(
+  "/:id/reactivate",
+  {
+    preHandler:
+      requireScreenAccess(
+        "tenants.tenants",
+        "WRITE"
+      ),
+
+    schema: {
+      tags: [
+        "Tenants"
+      ],
+
+      summary:
+        "Reactivate Tenant",
+
+      params: {
+        type: "object",
+
+        required: [
+          "id"
+        ],
+
+        properties: {
+          id: {
+            type: "string",
+            format: "uuid"
+          }
+        }
+      }
     }
-  });
+  },
+
+  async (request, reply) => {
+
+    try {
+
+      return await service
+        .reactivateTenant(
+          request.params.id,
+          request.user.adminId
+        );
+
+    } catch (error) {
+
+      request.log.error(error);
+
+      return reply
+        .code(
+          error.statusCode || 500
+        )
+        .send({
+          error:
+            error.message
+        });
+    }
+  }
+);
+
 
   // ---------------------------------
   // UPDATE PRIMARY CONTACT
@@ -1210,6 +1320,11 @@ module.exports = async function (fastify) {
   fastify.put(
     "/:id/primary-contact",
     {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        ),
       schema: {
         tags: [
           "Tenants"
@@ -1324,6 +1439,11 @@ module.exports = async function (fastify) {
 
   // UPDATE TENANT
   fastify.put('/:id', {
+    preHandler:
+      requireScreenAccess(
+        "tenants.tenants",
+        "WRITE"
+      ),
     schema: {
       params: {
         type: 'object',
@@ -1405,19 +1525,43 @@ module.exports = async function (fastify) {
     }
   });
 
+  // ---------------------------------
   // DEACTIVATE TENANT
-  fastify.delete('/:id', async (request, reply) => {
-    try {
-      return await service.deactivateTenant(
-        request.params.id,
-        request.user.adminId
-      );
-    } catch (error) {
-      request.log.error(error);
-      return reply.code(error.statusCode || 500).send({
-        error: error.message
-      });
+  // ---------------------------------
+  fastify.delete(
+    "/:id",
+    {
+      preHandler:
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        )
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        return await service
+          .deactivateTenant(
+            request.params.id,
+            request.user.adminId
+          );
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            error:
+              error.message
+          });
+      }
     }
-  });
+  );
 
 };

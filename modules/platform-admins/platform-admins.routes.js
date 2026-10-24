@@ -1,6 +1,12 @@
 const service =
     require("./platform-admins.service");
 
+const {
+    requireScreenAccess
+} = require(
+    "../../common/security/requireScreenAccess"
+);
+
 
 module.exports =
     async function (fastify) {
@@ -11,6 +17,11 @@ module.exports =
         fastify.post(
             "/",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "WRITE"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -142,6 +153,11 @@ module.exports =
         fastify.get(
             "/",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "READ"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -217,6 +233,11 @@ module.exports =
         fastify.get(
             "/count",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "READ"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -296,6 +317,11 @@ module.exports =
         fastify.get(
             "/security/screens",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "READ"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -350,6 +376,11 @@ module.exports =
         fastify.get(
             "/:id/security",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "READ"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -459,6 +490,11 @@ module.exports =
         fastify.put(
             "/:id/security",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "WRITE"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -583,6 +619,11 @@ module.exports =
         fastify.post(
             "/:id/resend-activation",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "WRITE"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -655,6 +696,11 @@ module.exports =
         fastify.get(
             "/:id",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "READ"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -741,6 +787,11 @@ module.exports =
         fastify.put(
             "/:id",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "WRITE"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -854,6 +905,11 @@ module.exports =
         fastify.delete(
             "/:id",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "WRITE"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"
@@ -957,6 +1013,11 @@ module.exports =
         fastify.put(
             "/:id/reactivate",
             {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "WRITE"
+                    ),
                 schema: {
                     tags: [
                         "Platform Admins"

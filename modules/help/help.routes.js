@@ -1,3 +1,9 @@
+const {
+  requireScreenAccess
+} = require(
+  "../../common/security/requireScreenAccess"
+);
+
 const fs =
   require("fs");
 
@@ -30,6 +36,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/topics",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -73,6 +84,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/keys",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -130,6 +146,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/content",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -173,6 +194,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/content/:id",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -226,6 +252,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/published",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
 
@@ -288,6 +319,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/navigation",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
 
@@ -350,6 +386,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/related",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
 
@@ -412,6 +453,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/content",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "WRITE"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -517,6 +563,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/content/:id/draft",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "WRITE"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -580,6 +631,11 @@ module.exports = async function (fastify) {
   fastify.put(
     "/content/:id",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "WRITE"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -693,6 +749,11 @@ module.exports = async function (fastify) {
   fastify.post(
     "/content/:id/publish",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "WRITE"
+        ),
       schema: {
         tags: ["Help"],
         summary:
@@ -742,12 +803,17 @@ module.exports = async function (fastify) {
     }
   );
 
-    // ==================================================
+  // ==================================================
   // UPLOAD SYSTEM HELP IMAGE
   // ==================================================
   fastify.post(
     "/media/:articleId/image",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "WRITE"
+        ),
       schema: {
         tags: ["Help"],
 
@@ -1061,6 +1127,11 @@ module.exports = async function (fastify) {
   fastify.get(
     "/media/:mediaId/open",
     {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
       schema: {
         tags: ["Help"],
 
