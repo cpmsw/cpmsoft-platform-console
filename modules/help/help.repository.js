@@ -206,7 +206,8 @@ async function getPublishedSystemContentByKey(
   const result =
     await appDb.query(
       `SELECT
-         hc.id,
+        hc.id,
+         hc.article_id,
          hc.scope,
          hc.content_type,
          hc.topic_id,
@@ -491,9 +492,6 @@ async function getSystemDraftByHelpKey(
 }
 
 
-// ---------------------------------
-// CREATE SYSTEM HELP CONTENT
-// ---------------------------------
 // ---------------------------------
 // CREATE SYSTEM HELP CONTENT
 // ---------------------------------

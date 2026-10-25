@@ -927,7 +927,13 @@ module.exports = async function (fastify) {
               files: 1,
 
               fileSize:
-                25 * 1024 * 1024
+                Number(
+                  process.env
+                    .ATTACHMENT_MAX_FILE_SIZE_MB ||
+                  100
+                ) *
+                1024 *
+                1024
             }
           });
 
@@ -1117,6 +1123,453 @@ module.exports = async function (fastify) {
             force: true
           }
         );
+      }
+    }
+  );
+
+  // ==================================================
+  // UPLOAD SYSTEM HELP VIDEO
+  // ==================================================
+  fastify.post(
+    "/media/:articleId/video",
+    {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "WRITE"
+        ),
+
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Upload SYSTEM Help video",
+
+        consumes: [
+          "multipart/form-data"
+        ],
+
+        params: {
+          type: "object",
+
+          required: [
+            "articleId"
+          ],
+
+          properties: {
+
+            articleId: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      },
+
+      config: {
+        swaggerTransform: ({
+          schema
+        }) => {
+
+          return {
+            schema: {
+              ...schema,
+
+              body: {
+                type: "object",
+
+                required: [
+                  "file"
+                ],
+
+                properties: {
+
+                  file: {
+                    type: "string",
+                    format: "binary"
+                  },
+
+                  caption: {
+                    type: "string"
+                  }
+                }
+              }
+            }
+          };
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      if (
+        !request.isMultipart()
+      ) {
+
+        return reply
+          .code(400)
+          .send({
+            code:
+              "HELP_MEDIA_MULTIPART_REQUIRED",
+
+            error:
+              "Multipart form data is required."
+          });
+      }
+
+
+      const tempDirectory =
+        await fsPromises.mkdtemp(
+          path.join(
+            os.tmpdir(),
+            "cpmsoft-help-video-"
+          )
+        );
+
+
+      try {
+
+        let stagedFile =
+          null;
+
+        let caption =
+          null;
+
+
+        const parts =
+          request.parts({
+            limits: {
+              files: 1,
+
+              fileSize:
+                500 * 1024 * 1024
+            }
+          });
+
+
+        for await (
+          const part of parts
+        ) {
+
+          if (
+            part.type === "field"
+          ) {
+
+            if (
+              part.fieldname ===
+              "caption"
+            ) {
+
+              caption =
+                String(
+                  part.value || ""
+                ).trim() ||
+                null;
+            }
+
+            continue;
+          }
+
+
+          if (stagedFile) {
+
+            const error =
+              new Error(
+                "Only one Help video may be uploaded at a time."
+              );
+
+            error.statusCode = 400;
+            error.code =
+              "HELP_MEDIA_TOO_MANY_FILES";
+
+            throw error;
+          }
+
+
+          const tempFilename =
+            crypto.randomUUID();
+
+
+          const tempPath =
+            path.join(
+              tempDirectory,
+              tempFilename
+            );
+
+
+          await pipeline(
+            part.file,
+
+            fs.createWriteStream(
+              tempPath
+            )
+          );
+
+
+          if (
+            part.file.truncated
+          ) {
+
+            const error =
+              new Error(
+                "Help video exceeds the maximum allowed size."
+              );
+
+            error.statusCode = 413;
+            error.code =
+              "HELP_VIDEO_TOO_LARGE";
+
+            throw error;
+          }
+
+
+          const stats =
+            await fsPromises.stat(
+              tempPath
+            );
+
+
+          stagedFile = {
+            tempPath,
+
+            originalFilename:
+              part.filename,
+
+            contentType:
+              part.mimetype ||
+              "application/octet-stream",
+
+            fileSizeBytes:
+              stats.size
+          };
+        }
+
+
+        if (!stagedFile) {
+
+          const error =
+            new Error(
+              "A Help video file is required."
+            );
+
+          error.statusCode = 400;
+          error.code =
+            "HELP_VIDEO_REQUIRED";
+
+          throw error;
+        }
+
+
+        const created =
+          await service
+            .createSystemHelpVideo(
+              request.params.articleId,
+              request.user.adminId,
+              {
+                originalFilename:
+                  stagedFile
+                    .originalFilename,
+
+                contentType:
+                  stagedFile
+                    .contentType,
+
+                fileSizeBytes:
+                  stagedFile
+                    .fileSizeBytes,
+
+                caption,
+
+                source:
+                  fs.createReadStream(
+                    stagedFile.tempPath
+                  )
+              }
+            );
+
+
+        return reply
+          .code(201)
+          .send(created);
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_VIDEO_UPLOAD_FAILED",
+
+            error:
+              error.message
+          });
+
+      } finally {
+
+        await fsPromises.rm(
+          tempDirectory,
+          {
+            recursive: true,
+            force: true
+          }
+        );
+      }
+    }
+  );
+
+  // ==================================================
+  // GET SYSTEM HELP MEDIA FOR ARTICLE
+  // ==================================================
+  fastify.get(
+    "/media/article/:articleId",
+    {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "READ"
+        ),
+
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Get SYSTEM Help media for article",
+
+        params: {
+          type: "object",
+
+          required: [
+            "articleId"
+          ],
+
+          properties: {
+
+            articleId: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const media =
+          await service
+            .getSystemHelpMediaForArticle(
+              request.params.articleId
+            );
+
+
+        return reply.send(
+          media
+        );
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_MEDIA_LOAD_FAILED",
+
+            error:
+              error.message
+          });
+      }
+    }
+  );
+
+  // ==================================================
+  // DELETE SYSTEM HELP VIDEO
+  // ==================================================
+  fastify.delete(
+    "/media/:mediaId/video",
+    {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.help",
+          "WRITE"
+        ),
+
+      schema: {
+        tags: ["Help"],
+
+        summary:
+          "Delete SYSTEM Help video",
+
+        params: {
+          type: "object",
+
+          required: [
+            "mediaId"
+          ],
+
+          properties: {
+
+            mediaId: {
+              type: "string",
+              format: "uuid"
+            }
+          },
+
+          additionalProperties:
+            false
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const deleted =
+          await service
+            .deleteSystemHelpVideo(
+              request.params.mediaId
+            );
+
+
+        return {
+          deleted: true,
+          media: deleted
+        };
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode || 500
+          )
+          .send({
+            code:
+              error.code ||
+              "HELP_VIDEO_DELETE_FAILED",
+
+            error:
+              error.message
+          });
       }
     }
   );

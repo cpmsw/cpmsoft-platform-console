@@ -113,7 +113,24 @@ async function getPublishedSystemContentByKey(
   }
 
 
-  return content;
+  const media =
+    await repository
+      .getSystemMediaForArticle(
+        content.article_id
+      );
+
+
+  const video =
+    media.find(
+      item =>
+        item.media_type === "VIDEO"
+    ) || null;
+
+
+  return {
+    ...content,
+    video
+  };
 }
 
 // ---------------------------------
@@ -627,6 +644,16 @@ async function cleanupUnreferencedSystemMedia(
 
   for (const media of mediaRows) {
 
+    // Article-level instructional videos are
+    // intentionally not embedded in Tiptap
+    // content_json. They belong to the Help
+    // article itself and must survive publishing.
+    if (
+      media.media_type === "VIDEO"
+    ) {
+      continue;
+    }
+
     if (
       referencedMediaIds.has(
         String(media.id)
@@ -634,7 +661,6 @@ async function cleanupUnreferencedSystemMedia(
     ) {
       continue;
     }
-
 
     const storage =
       storageFactory
@@ -1033,6 +1059,387 @@ async function createSystemHelpImage(
   }
 }
 
+// ---------------------------------
+// CREATE SYSTEM HELP VIDEO
+// ---------------------------------
+async function createSystemHelpVideo(
+  articleId,
+  adminId,
+  file
+) {
+
+  const article =
+    await repository
+      .getArticleById(
+        articleId
+      );
+
+
+  if (!article) {
+
+    const error =
+      new Error(
+        "Help article not found."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_ARTICLE_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  const originalFilename =
+    String(
+      file.originalFilename || ""
+    ).trim();
+
+
+  if (!originalFilename) {
+
+    const error =
+      new Error(
+        "Video filename is required."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_MEDIA_FILENAME_REQUIRED";
+
+    throw error;
+  }
+
+
+  const contentType =
+    String(
+      file.contentType || ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  const allowedTypes =
+    new Set([
+      "video/mp4",
+      "video/webm"
+    ]);
+
+
+  if (!allowedTypes.has(contentType)) {
+
+    const error =
+      new Error(
+        "Help video must be MP4 or WEBM."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_VIDEO_TYPE_INVALID";
+
+    throw error;
+  }
+
+
+  const fileSizeBytes =
+    Number(
+      file.fileSizeBytes || 0
+    );
+
+
+  if (
+    !Number.isFinite(
+      fileSizeBytes
+    ) ||
+    fileSizeBytes <= 0
+  ) {
+
+    const error =
+      new Error(
+        "Help video is empty."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_VIDEO_EMPTY";
+
+    throw error;
+  }
+
+
+  const mediaId =
+    crypto.randomUUID();
+
+
+  const safeFilename =
+    sanitizeMediaFilename(
+      originalFilename
+    );
+
+
+  const storageKey =
+    `help/system/videos/${mediaId}___${safeFilename}`;
+
+
+  const storage =
+    storageFactory
+      .getStorageProvider();
+
+
+  const storageProvider =
+    String(
+      process.env
+        .ATTACHMENT_STORAGE_PROVIDER ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+
+
+  await storage.put(
+    storageKey,
+    file.source,
+    {
+      contentType,
+      contentLength:
+        fileSizeBytes
+    }
+  );
+
+
+  try {
+
+    const existingMedia =
+      await repository
+        .getSystemMediaForArticle(
+          articleId
+        );
+
+
+    const existingVideos =
+      existingMedia.filter(
+        media =>
+          media.media_type ===
+          "VIDEO"
+      );
+
+
+    const created =
+      await repository
+        .createSystemMedia({
+          id:
+            mediaId,
+
+          articleId,
+
+          mediaType:
+            "VIDEO",
+
+          originalFilename,
+
+          storageProvider,
+
+          storageKey,
+
+          contentType,
+
+          fileSizeBytes,
+
+          altText:
+            null,
+
+          caption:
+            file.caption || null,
+
+          adminId
+        });
+
+
+    for (
+      const existingVideo
+      of existingVideos
+    ) {
+
+      try {
+
+        const oldStorage =
+          storageFactory
+            .getStorageProviderByName(
+              existingVideo
+                .storage_provider
+            );
+
+
+        await oldStorage.remove(
+          existingVideo.storage_key
+        );
+
+
+        await repository
+          .deleteSystemMedia(
+            existingVideo.id
+          );
+
+      } catch (cleanupError) {
+
+        console.error(
+          "Unable to clean up replaced Help video.",
+          {
+            articleId,
+            mediaId:
+              existingVideo.id,
+            storageKey:
+              existingVideo.storage_key,
+            error:
+              cleanupError
+          }
+        );
+      }
+    }
+
+
+    return created;
+
+  } catch (error) {
+
+    // If the DB write fails after storage
+    // succeeds, remove the physical file.
+    try {
+
+      await storage.remove(
+        storageKey
+      );
+
+    } catch (cleanupError) {
+
+      console.error(
+        "Unable to clean up Help video after database failure.",
+        cleanupError
+      );
+    }
+
+
+    throw error;
+  }
+}
+
+// ---------------------------------
+// GET SYSTEM HELP MEDIA FOR ARTICLE
+// ---------------------------------
+async function getSystemHelpMediaForArticle(
+  articleId
+) {
+
+  const article =
+    await repository
+      .getArticleById(
+        articleId
+      );
+
+
+  if (!article) {
+
+    const error =
+      new Error(
+        "Help article not found."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_ARTICLE_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  return await repository
+    .getSystemMediaForArticle(
+      articleId
+    );
+}
+
+// ---------------------------------
+// DELETE SYSTEM HELP VIDEO
+// ---------------------------------
+async function deleteSystemHelpVideo(
+  mediaId
+) {
+
+  const media =
+    await repository
+      .getSystemMediaById(
+        mediaId
+      );
+
+
+  if (!media) {
+
+    const error =
+      new Error(
+        "Help video not found."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_VIDEO_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  if (
+    media.media_type !== "VIDEO"
+  ) {
+
+    const error =
+      new Error(
+        "The selected Help media is not a video."
+      );
+
+    error.statusCode = 400;
+    error.code =
+      "HELP_MEDIA_NOT_VIDEO";
+
+    throw error;
+  }
+
+
+  const storage =
+    storageFactory
+      .getStorageProviderByName(
+        media.storage_provider
+      );
+
+
+  await storage.remove(
+    media.storage_key
+  );
+
+
+  const deleted =
+    await repository
+      .deleteSystemMedia(
+        media.id
+      );
+
+
+  if (!deleted) {
+
+    const error =
+      new Error(
+        "Help video could not be deleted."
+      );
+
+    error.statusCode = 404;
+    error.code =
+      "HELP_VIDEO_NOT_FOUND";
+
+    throw error;
+  }
+
+
+  return deleted;
+}
 
 // ---------------------------------
 // OPEN SYSTEM HELP MEDIA
@@ -1096,5 +1503,8 @@ module.exports = {
   publishSystemContent,
 
   createSystemHelpImage,
+  createSystemHelpVideo,
+  getSystemHelpMediaForArticle,
+  deleteSystemHelpVideo,
   openSystemHelpMedia
 };
