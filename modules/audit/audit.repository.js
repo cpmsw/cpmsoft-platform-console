@@ -107,17 +107,55 @@ async function getByParent(
     (page - 1) *
     pageSize;
 
-  const params = [
-    tenantId,
-    parentType,
-    parentId
-  ];
+  const params = [];
+  const where = [];
 
-  const where = [
-    "ah.tenant_id = $1",
-    "ah.parent_type = $2",
-    "ah.parent_id = $3"
-  ];
+
+  // ---------------------------------
+  // TENANT / PLATFORM SCOPE
+  // ---------------------------------
+
+  if (tenantId) {
+
+    params.push(
+      tenantId
+    );
+
+    where.push(
+      `ah.tenant_id =
+     $${params.length}`
+    );
+
+  } else {
+
+    where.push(
+      "ah.tenant_id IS NULL"
+    );
+  }
+
+
+  // ---------------------------------
+  // PARENT
+  // ---------------------------------
+
+  params.push(
+    parentType
+  );
+
+  where.push(
+    `ah.parent_type =
+   $${params.length}`
+  );
+
+
+  params.push(
+    parentId
+  );
+
+  where.push(
+    `ah.parent_id =
+   $${params.length}`
+  );
 
   if (options.entityType) {
 

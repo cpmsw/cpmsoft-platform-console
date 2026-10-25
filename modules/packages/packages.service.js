@@ -1,6 +1,9 @@
 const authDb =
   require("../../db/authDb");
 
+const audit =
+  require("../audit");
+
 
 // ---------------------------------
 // GET PACKAGES WITH RESOURCES
@@ -276,50 +279,149 @@ async function getPackageById(id) {
   return result.rows[0];
 }
 
+
+// ---------------------------------
+// PACKAGE AUDIT SNAPSHOT
+// ---------------------------------
+
+function packageSnapshot(
+  row
+) {
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    package_key:
+      row.package_key,
+
+    package_name:
+      row.package_name,
+
+    description:
+      row.description,
+
+    display_order:
+      row.display_order,
+
+    is_active:
+      row.is_active
+  };
+}
+
+
 // ---------------------------------
 // CREATE PACKAGE
 // ---------------------------------
-async function createPackage(data) {
+async function createPackage(
+  data,
+  adminId
+) {
+
+  const client =
+    await authDb.connect();
+
   try {
-    const result = await authDb.query(
-      `INSERT INTO packages
-(
-   package_key,
-   package_name,
-   display_name,
-   description,
-   is_active,
-   display_order,
-   created_at,
-   updated_at
-)
- VALUES
-(
-   $1,
-   $2,
-   $3,
-   $4,
-   $5,
-   $6,
-   now(),
-   now()
-)
- RETURNING *`,
-      [
-        data.package_key.trim(),
-        data.package_name.trim(),
-        data.package_name.trim(),
-        data.description?.trim() || null,
-        data.is_active ?? true,
-        data.display_order ?? 0
-      ]
+
+    await client.query(
+      "BEGIN"
     );
 
-    return result.rows[0];
+
+    const result =
+      await client.query(
+        `INSERT INTO packages
+         (
+           package_key,
+           package_name,
+           display_name,
+           description,
+           is_active,
+           display_order,
+           created_at,
+           updated_at
+         )
+         VALUES
+         (
+           $1,
+           $2,
+           $3,
+           $4,
+           $5,
+           $6,
+           now(),
+           now()
+         )
+         RETURNING *`,
+        [
+          data.package_key.trim(),
+          data.package_name.trim(),
+          data.package_name.trim(),
+          data.description?.trim() || null,
+          data.is_active ?? true,
+          data.display_order ?? 0
+        ]
+      );
+
+
+    const row =
+      result.rows[0];
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          null,
+
+        parent_type:
+          "package",
+
+        parent_id:
+          row.id,
+
+        entity_type:
+          "package",
+
+        entity_id:
+          row.id,
+
+        action:
+          "CREATE",
+
+        old_data:
+          null,
+
+        new_data:
+          packageSnapshot(
+            row
+          ),
+
+        changed_by:
+          adminId
+      },
+      client
+    );
+
+
+    await client.query(
+      "COMMIT"
+    );
+
+
+    return row;
 
   } catch (error) {
 
-    if (error.code === "23505") {
+    await client.query(
+      "ROLLBACK"
+    );
+
+
+    if (
+      error.code === "23505"
+    ) {
+
       const duplicate =
         new Error(
           "Package key already exists."
@@ -332,87 +434,273 @@ async function createPackage(data) {
       throw duplicate;
     }
 
+
     throw error;
+
+  } finally {
+
+    client.release();
   }
 }
-
 
 // ---------------------------------
 // UPDATE PACKAGE
 // ---------------------------------
 async function updatePackage(
   id,
-  data
+  data,
+  adminId
 ) {
-  const result =
-    await authDb.query(
-      `UPDATE packages
- SET package_name = $2,
-     display_name = $2,
-     description = $3,
-     display_order = $4,
-     updated_at = now()
- WHERE id = $1
- RETURNING *`,
-      [
-        id,
-        data.package_name.trim(),
-        data.description?.trim() || null,
-        data.display_order ?? 0
-      ]
+
+  const client =
+    await authDb.connect();
+
+  try {
+
+    await client.query(
+      "BEGIN"
     );
 
-  if (result.rowCount === 0) {
-    const error =
-      new Error(
-        "Package not found."
+
+    const existingResult =
+      await client.query(
+        `SELECT *
+         FROM packages
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
       );
 
-    error.statusCode = 404;
-    error.code = "PACKAGE_NOT_FOUND";
+
+    if (
+      existingResult.rowCount === 0
+    ) {
+
+      const error =
+        new Error(
+          "Package not found."
+        );
+
+      error.statusCode = 404;
+      error.code =
+        "PACKAGE_NOT_FOUND";
+
+      throw error;
+    }
+
+
+    const existing =
+      existingResult.rows[0];
+
+
+    const result =
+      await client.query(
+        `UPDATE packages
+         SET package_name = $2,
+             display_name = $2,
+             description = $3,
+             display_order = $4,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          id,
+          data.package_name.trim(),
+          data.description?.trim() || null,
+          data.display_order ?? 0
+        ]
+      );
+
+
+    const row =
+      result.rows[0];
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          null,
+
+        parent_type:
+          "package",
+
+        parent_id:
+          id,
+
+        entity_type:
+          "package",
+
+        entity_id:
+          id,
+
+        action:
+          "UPDATE",
+
+        old_data:
+          packageSnapshot(
+            existing
+          ),
+
+        new_data:
+          packageSnapshot(
+            row
+          ),
+
+        changed_by:
+          adminId
+      },
+      client
+    );
+
+
+    await client.query(
+      "COMMIT"
+    );
+
+
+    return row;
+
+  } catch (error) {
+
+    await client.query(
+      "ROLLBACK"
+    );
 
     throw error;
+
+  } finally {
+
+    client.release();
   }
-
-  return result.rows[0];
 }
-
 
 // ---------------------------------
 // ACTIVATE / DEACTIVATE PACKAGE
 // ---------------------------------
 async function setPackageActive(
   id,
-  isActive
+  isActive,
+  adminId
 ) {
-  const result =
-    await authDb.query(
-      `UPDATE packages
-       SET is_active = $2,
-           updated_at = now()
-       WHERE id = $1
-       RETURNING *`,
-      [
-        id,
-        isActive
-      ]
+
+  const client =
+    await authDb.connect();
+
+  try {
+
+    await client.query(
+      "BEGIN"
     );
 
-  if (result.rowCount === 0) {
-    const error =
-      new Error(
-        "Package not found."
+
+    const existingResult =
+      await client.query(
+        `SELECT *
+         FROM packages
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
       );
 
-    error.statusCode = 404;
-    error.code = "PACKAGE_NOT_FOUND";
+
+    if (
+      existingResult.rowCount === 0
+    ) {
+
+      const error =
+        new Error(
+          "Package not found."
+        );
+
+      error.statusCode = 404;
+      error.code =
+        "PACKAGE_NOT_FOUND";
+
+      throw error;
+    }
+
+
+    const existing =
+      existingResult.rows[0];
+
+
+    const result =
+      await client.query(
+        `UPDATE packages
+         SET is_active = $2,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          id,
+          isActive
+        ]
+      );
+
+
+    const row =
+      result.rows[0];
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          null,
+
+        parent_type:
+          "package",
+
+        parent_id:
+          id,
+
+        entity_type:
+          "package",
+
+        entity_id:
+          id,
+
+        action:
+          isActive
+            ? "REACTIVATE"
+            : "DEACTIVATE",
+
+        old_data:
+          packageSnapshot(
+            existing
+          ),
+
+        new_data:
+          packageSnapshot(
+            row
+          ),
+
+        changed_by:
+          adminId
+      },
+      client
+    );
+
+
+    await client.query(
+      "COMMIT"
+    );
+
+
+    return row;
+
+  } catch (error) {
+
+    await client.query(
+      "ROLLBACK"
+    );
 
     throw error;
+
+  } finally {
+
+    client.release();
   }
-
-  return result.rows[0];
 }
-
 
 // ---------------------------------
 // PACKAGE RESOURCE ASSIGNMENTS
@@ -476,7 +764,8 @@ async function getPackageResources(
 // ---------------------------------
 async function savePackageResources(
   packageId,
-  resources
+  resources,
+  adminId
 ) {
 
   if (!Array.isArray(resources)) {
@@ -541,6 +830,12 @@ async function savePackageResources(
   try {
 
     await client.query("BEGIN");
+
+    const oldSnapshot =
+      await getPackageResourcesSnapshot(
+        packageId,
+        client
+      );
 
 
     // Validate selected resources.
@@ -621,6 +916,44 @@ async function savePackageResources(
       );
     }
 
+    const newSnapshot =
+      await getPackageResourcesSnapshot(
+        packageId,
+        client
+      );
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          null,
+
+        parent_type:
+          "package",
+
+        parent_id:
+          packageId,
+
+        entity_type:
+          "package_resources",
+
+        entity_id:
+          packageId,
+
+        action:
+          "UPDATE",
+
+        old_data:
+          oldSnapshot,
+
+        new_data:
+          newSnapshot,
+
+        changed_by:
+          adminId
+      },
+      client
+    );
 
     await client.query("COMMIT");
 
@@ -640,6 +973,57 @@ async function savePackageResources(
     packageId,
     resourceCount:
       selections.length
+  };
+}
+
+// ---------------------------------
+// PACKAGE RESOURCES AUDIT SNAPSHOT
+// ---------------------------------
+
+async function getPackageResourcesSnapshot(
+  packageId,
+  client
+) {
+
+  const result =
+    await client.query(
+      `SELECT
+         r.id AS resource_id,
+         r.resource_key,
+         r.resource_name,
+         pr.is_default,
+         pr.display_order
+       FROM package_resources pr
+       JOIN resources r
+         ON r.id = pr.resource_id
+       WHERE pr.package_id = $1
+       ORDER BY
+         pr.display_order,
+         r.resource_name`,
+      [packageId]
+    );
+
+
+  return {
+    resources:
+      result.rows.map(
+        row => ({
+          resource_id:
+            row.resource_id,
+
+          resource_key:
+            row.resource_key,
+
+          resource_name:
+            row.resource_name,
+
+          is_default:
+            row.is_default,
+
+          display_order:
+            row.display_order
+        })
+      )
   };
 }
 

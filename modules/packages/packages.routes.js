@@ -1,11 +1,14 @@
 const service =
   require("./packages.service");
 
+const audit =
+  require("../audit");
+
 const {
   requireScreenAccess
 } = require(
   "../../common/security/requireScreenAccess"
-);  
+);
 
 
 module.exports =
@@ -19,10 +22,10 @@ module.exports =
       "/",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "READ"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "READ"
+          ),
         schema: {
           tags: [
             "Packages",
@@ -74,10 +77,10 @@ module.exports =
       "/admin",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "READ"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "READ"
+          ),
         schema: {
           tags: ["Packages"],
 
@@ -154,10 +157,10 @@ module.exports =
       "/admin/count",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "READ"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "READ"
+          ),
         schema: {
           tags: ["Packages"],
 
@@ -231,16 +234,123 @@ module.exports =
     );
 
     // ---------------------------------
+    // GET PACKAGE HISTORY
+    // ---------------------------------
+
+    fastify.get(
+      "/:id/history",
+      {
+        preHandler:
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "READ"
+          ),
+
+        schema: {
+          tags: ["Packages"],
+
+          summary:
+            "Get package audit history",
+
+          params: {
+            type: "object",
+            required: ["id"],
+
+            properties: {
+              id: {
+                type: "string",
+                format: "uuid"
+              }
+            }
+          },
+
+          querystring: {
+            type: "object",
+
+            properties: {
+
+              entityType: {
+                type: "string"
+              },
+
+              action: {
+                type: "string"
+              },
+
+              userSearch: {
+                type: "string"
+              },
+
+              dateFrom: {
+                type: "string"
+              },
+
+              dateTo: {
+                type: "string"
+              },
+
+              page: {
+                type: "integer",
+                minimum: 1,
+                default: 1
+              },
+
+              pageSize: {
+                type: "integer",
+                minimum: 1,
+                maximum: 100,
+                default: 25
+              }
+            }
+          }
+        }
+      },
+
+      async (request, reply) => {
+
+        try {
+
+          const result =
+            await audit.getPackageHistory(
+              request.params.id,
+              request.query
+            );
+
+          return result;
+
+        } catch (error) {
+
+          request.log.error(error);
+
+          return reply
+            .code(
+              error.statusCode ||
+              500
+            )
+            .send({
+              code:
+                error.code ||
+                "PACKAGE_HISTORY_FAILED",
+
+              message:
+                error.message ||
+                "Unable to retrieve package history."
+            });
+        }
+      }
+    );
+
+    // ---------------------------------
     // GET PACKAGE BY ID
     // ---------------------------------
     fastify.get(
       "/:id",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "READ"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "READ"
+          ),
         schema: {
           tags: ["Packages"],
           summary: "Get package by ID",
@@ -285,10 +395,10 @@ module.exports =
       "/",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "WRITE"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "WRITE"
+          ),
         schema: {
           tags: ["Packages"],
           summary: "Create package",
@@ -333,7 +443,8 @@ module.exports =
         try {
           const pkg =
             await service.createPackage(
-              request.body
+              request.body,
+              request.user.adminId
             );
 
           return reply
@@ -362,10 +473,10 @@ module.exports =
       "/:id",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "WRITE"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "WRITE"
+          ),
         schema: {
           tags: ["Packages"],
           summary: "Update package",
@@ -410,7 +521,8 @@ module.exports =
         try {
           return await service.updatePackage(
             request.params.id,
-            request.body
+            request.body,
+            request.user.adminId
           );
         } catch (error) {
           request.log.error(error);
@@ -435,10 +547,10 @@ module.exports =
       "/:id/active",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "WRITE"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "WRITE"
+          ),
         schema: {
           tags: ["Packages"],
           summary: "Activate or deactivate package",
@@ -471,7 +583,8 @@ module.exports =
         try {
           return await service.setPackageActive(
             request.params.id,
-            request.body.is_active
+            request.body.is_active,
+            request.user.adminId
           );
         } catch (error) {
           request.log.error(error);
@@ -496,10 +609,10 @@ module.exports =
       "/:id/resources",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "READ"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "READ"
+          ),
         schema: {
           tags: ["Packages"],
           summary: "Get package resources",
@@ -544,10 +657,10 @@ module.exports =
       "/:id/resources",
       {
         preHandler:
-  requireScreenAccess(
-    "cpmsoft.packages",
-    "WRITE"
-  ),
+          requireScreenAccess(
+            "cpmsoft.packages",
+            "WRITE"
+          ),
         schema: {
           tags: ["Packages"],
           summary: "Update package resources",
@@ -601,7 +714,8 @@ module.exports =
         try {
           return await service.savePackageResources(
             request.params.id,
-            request.body.resources
+            request.body.resources,
+            request.user.adminId
           );
         } catch (error) {
           request.log.error(error);

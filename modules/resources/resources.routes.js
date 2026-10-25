@@ -1,6 +1,9 @@
 const service =
   require("./resources.service");
 
+const audit =
+  require("../audit");
+
 const {
   requireScreenAccess
 } = require(
@@ -329,7 +332,8 @@ module.exports = async function (fastify) {
       try {
         const resource =
           await service.createResource(
-            request.body
+            request.body,
+            request.user.adminId
           );
 
         return reply
@@ -351,6 +355,112 @@ module.exports = async function (fastify) {
     }
   );
 
+  // ---------------------------------
+  // GET RESOURCE HISTORY
+  // ---------------------------------
+
+  fastify.get(
+    "/:id/history",
+    {
+      preHandler:
+        requireScreenAccess(
+          "cpmsoft.resources",
+          "READ"
+        ),
+
+      schema: {
+        tags: ["Resources"],
+
+        summary:
+          "Get resource audit history",
+
+        params: {
+          type: "object",
+          required: ["id"],
+
+          properties: {
+            id: {
+              type: "string",
+              format: "uuid"
+            }
+          }
+        },
+
+        querystring: {
+          type: "object",
+
+          properties: {
+
+            entityType: {
+              type: "string"
+            },
+
+            action: {
+              type: "string"
+            },
+
+            userSearch: {
+              type: "string"
+            },
+
+            dateFrom: {
+              type: "string"
+            },
+
+            dateTo: {
+              type: "string"
+            },
+
+            page: {
+              type: "integer",
+              minimum: 1,
+              default: 1
+            },
+
+            pageSize: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 25
+            }
+          }
+        }
+      }
+    },
+
+    async (request, reply) => {
+
+      try {
+
+        const result =
+          await audit.getResourceHistory(
+            request.params.id,
+            request.query
+          );
+
+        return result;
+
+      } catch (error) {
+
+        request.log.error(error);
+
+        return reply
+          .code(
+            error.statusCode ||
+            500
+          )
+          .send({
+            code:
+              error.code ||
+              "RESOURCE_HISTORY_FAILED",
+
+            message:
+              error.message ||
+              "Unable to retrieve resource history."
+          });
+      }
+    }
+  );
 
   // ---------------------------------
   // UPDATE RESOURCE
@@ -412,9 +522,9 @@ module.exports = async function (fastify) {
       try {
         return await service.updateResource(
           request.params.id,
-          request.body
+          request.body,
+          request.user.adminId
         );
-
       } catch (error) {
         request.log.error(error);
 
@@ -474,7 +584,8 @@ module.exports = async function (fastify) {
       try {
         return await service.setResourceActive(
           request.params.id,
-          request.body.is_active
+          request.body.is_active,
+          request.user.adminId
         );
 
       } catch (error) {
@@ -499,10 +610,10 @@ module.exports = async function (fastify) {
     "/tenant/:tenantId",
     {
       preHandler:
-  requireScreenAccess(
-    "tenants.tenants",
-    "READ"
-  ),
+        requireScreenAccess(
+          "tenants.tenants",
+          "READ"
+        ),
       schema: {
         tags: ["Resources"],
 
@@ -566,10 +677,10 @@ module.exports = async function (fastify) {
     "/tenant/:tenantId",
     {
       preHandler:
-  requireScreenAccess(
-    "tenants.tenants",
-    "WRITE"
-  ),
+        requireScreenAccess(
+          "tenants.tenants",
+          "WRITE"
+        ),
       schema: {
         tags: ["Resources"],
 

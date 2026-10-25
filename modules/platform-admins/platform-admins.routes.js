@@ -1,12 +1,14 @@
 const service =
     require("./platform-admins.service");
 
+const audit =
+    require("../audit");
+
 const {
     requireScreenAccess
 } = require(
     "../../common/security/requireScreenAccess"
 );
-
 
 module.exports =
     async function (fastify) {
@@ -101,9 +103,9 @@ module.exports =
                     const result =
                         await service
                             .createPlatformAdmin(
-                                request.body
+                                request.body,
+                                request.user.adminId
                             );
-
 
                     return reply
                         .code(201)
@@ -578,9 +580,9 @@ module.exports =
                         await service
                             .updatePlatformAdminScreenAccess(
                                 request.params.id,
-                                request.body.screens
+                                request.body.screens,
+                                request.user.adminId
                             );
-
 
                     return {
                         success: true,
@@ -682,6 +684,126 @@ module.exports =
                             code:
                                 error.code ||
                                 "PLATFORM_ADMIN_INVITATION_RESEND_FAILED",
+
+                            error:
+                                error.message
+                        });
+                }
+            }
+        );
+
+        // ---------------------------------
+        // GET PLATFORM ADMIN HISTORY
+        // ---------------------------------
+        fastify.get(
+            "/:id/history",
+            {
+                preHandler:
+                    requireScreenAccess(
+                        "cpmsoft.platform-admins",
+                        "READ"
+                    ),
+
+                schema: {
+                    tags: [
+                        "Platform Admins"
+                    ],
+
+                    summary:
+                        "Get Platform administrator history",
+
+                    params: {
+                        type: "object",
+
+                        required: [
+                            "id"
+                        ],
+
+                        additionalProperties:
+                            false,
+
+                        properties: {
+                            id: {
+                                type: "string",
+                                format: "uuid"
+                            }
+                        }
+                    },
+
+                    querystring: {
+                        type: "object",
+
+                        additionalProperties:
+                            false,
+
+                        properties: {
+
+                            entityType: {
+                                type: "string"
+                            },
+
+                            action: {
+                                type: "string"
+                            },
+
+                            userSearch: {
+                                type: "string"
+                            },
+
+                            dateFrom: {
+                                type: "string"
+                            },
+
+                            dateTo: {
+                                type: "string"
+                            },
+
+                            page: {
+                                type: "integer",
+                                minimum: 1
+                            },
+
+                            pageSize: {
+                                type: "integer",
+                                minimum: 1,
+                                maximum: 100
+                            }
+                        }
+                    }
+                }
+            },
+
+            async (request, reply) => {
+
+                try {
+
+                    const result =
+                        await audit
+                            .getPlatformAdminHistory(
+                                request.params.id,
+                                request.query
+                            );
+
+
+                    return result;
+
+
+                } catch (error) {
+
+                    request.log.error(
+                        error
+                    );
+
+
+                    return reply
+                        .code(
+                            error.statusCode ||
+                            500
+                        )
+                        .send({
+                            code:
+                                error.code ||
+                                "PLATFORM_ADMIN_HISTORY_FAILED",
 
                             error:
                                 error.message
@@ -854,9 +976,9 @@ module.exports =
                         await service
                             .updatePlatformAdmin(
                                 request.params.id,
-                                request.body
+                                request.body,
+                                request.user.adminId
                             );
-
 
                     if (!admin) {
 
@@ -965,8 +1087,10 @@ module.exports =
                     const admin =
                         await service
                             .deactivatePlatformAdmin(
-                                request.params.id
+                                request.params.id,
+                                request.user.adminId
                             );
+
                     if (!admin) {
 
                         return reply
@@ -1053,7 +1177,8 @@ module.exports =
                     const admin =
                         await service
                             .reactivatePlatformAdmin(
-                                request.params.id
+                                request.params.id,
+                                request.user.adminId
                             );
 
 

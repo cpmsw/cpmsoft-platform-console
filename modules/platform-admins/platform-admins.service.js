@@ -4,6 +4,9 @@ const crypto =
 const authDb =
     require("../../db/authDb");
 
+const audit =
+    require("../audit");
+
 const {
     sendEmail
 } =
@@ -18,14 +21,44 @@ const {
         "./platform-admin-activation-email"
     );
 
+
+// ---------------------------------
+// PLATFORM ADMIN AUDIT SNAPSHOT
+// ---------------------------------
+
+function platformAdminSnapshot(
+    row
+) {
+
+    if (!row) {
+        return null;
+    }
+
+
+    return {
+        display_name:
+            row.display_name,
+
+        email:
+            row.email,
+
+        is_active:
+            row.is_active
+    };
+}
+
 // ---------------------------------
 // CREATE PLATFORM ADMIN
 // ---------------------------------
-async function createPlatformAdmin({
-    display_name,
-    email,
-    screens = []
-}) {
+async function createPlatformAdmin(
+    {
+        display_name,
+        email,
+        screens = []
+    },
+    changedByAdminId
+) {
+
     const normalizedDisplayName =
         String(
             display_name || ""
@@ -289,6 +322,39 @@ async function createPlatformAdmin({
             );
         }
 
+        await audit.createAudit(
+            {
+                tenant_id:
+                    null,
+
+                parent_type:
+                    "platform_admin",
+
+                parent_id:
+                    admin.id,
+
+                entity_type:
+                    "platform_admin",
+
+                entity_id:
+                    admin.id,
+
+                action:
+                    "CREATE",
+
+                old_data:
+                    null,
+
+                new_data:
+                    platformAdminSnapshot(
+                        admin
+                    ),
+
+                changed_by:
+                    changedByAdminId
+            },
+            client
+        );
 
         await client.query(
             "COMMIT"
@@ -741,7 +807,8 @@ async function updatePlatformAdmin(
     {
         display_name,
         email
-    }
+    },
+    changedByAdminId
 ) {
 
     const normalizedDisplayName =
@@ -787,25 +854,62 @@ async function updatePlatformAdmin(
     }
 
 
+    const client =
+        await authDb.connect();
+
+
     try {
 
+        await client.query(
+            "BEGIN"
+        );
+
+
+        const existingResult =
+            await client.query(
+                `SELECT *
+                 FROM platform_admins
+                 WHERE id = $1
+                 FOR UPDATE`,
+                [
+                    adminId
+                ]
+            );
+
+
+        if (
+            existingResult.rowCount === 0
+        ) {
+
+            await client.query(
+                "ROLLBACK"
+            );
+
+            return null;
+        }
+
+
+        const existing =
+            existingResult.rows[0];
+
+
         const result =
-            await authDb.query(
+            await client.query(
                 `UPDATE platform_admins
                  SET
-                   display_name = $2,
-                   email = $3,
-                   updated_at = NOW()
+                    display_name = $2,
+                    email = $3,
+                    updated_at = NOW()
                  WHERE id = $1
                  RETURNING
-                   id,
-                   display_name,
-                   email,
-                   is_active,
-                   twofa_enabled,
-                   last_login_at,
-                   created_at,
-                   updated_at`,
+                    id,
+                    display_name,
+                    email,
+                    is_active,
+                    twofa_enabled,
+                    last_login_at,
+                    created_at,
+                    updated_at`,
                 [
                     adminId,
                     normalizedDisplayName,
@@ -814,10 +918,65 @@ async function updatePlatformAdmin(
             );
 
 
-        return result.rows[0] || null;
+        const row =
+            result.rows[0];
+
+
+        await audit.createAudit(
+            {
+                tenant_id:
+                    null,
+
+                parent_type:
+                    "platform_admin",
+
+                parent_id:
+                    adminId,
+
+                entity_type:
+                    "platform_admin",
+
+                entity_id:
+                    adminId,
+
+                action:
+                    "UPDATE",
+
+                old_data:
+                    platformAdminSnapshot(
+                        existing
+                    ),
+
+                new_data:
+                    platformAdminSnapshot(
+                        row
+                    ),
+
+                changed_by:
+                    changedByAdminId
+            },
+            client
+        );
+
+
+        await client.query(
+            "COMMIT"
+        );
+
+
+        return row;
 
 
     } catch (error) {
+
+        try {
+            await client.query(
+                "ROLLBACK"
+            );
+        } catch (_) {
+            // Preserve original error.
+        }
+
 
         if (
             error.code === "23505"
@@ -837,6 +996,11 @@ async function updatePlatformAdmin(
 
 
         throw error;
+
+
+    } finally {
+
+        client.release();
     }
 }
 
@@ -844,65 +1008,266 @@ async function updatePlatformAdmin(
 // DEACTIVATE PLATFORM ADMIN
 // ---------------------------------
 async function deactivatePlatformAdmin(
-    adminId
+    adminId,
+    changedByAdminId
 ) {
 
-    const result =
-        await authDb.query(
-            `UPDATE platform_admins
-             SET
-               is_active = false,
-               updated_at = NOW()
-             WHERE id = $1
-             RETURNING
-               id,
-               display_name,
-               email,
-               is_active,
-               twofa_enabled,
-               last_login_at,
-               created_at,
-               updated_at`,
-            [
-                adminId
-            ]
+    const client =
+        await authDb.connect();
+
+
+    try {
+
+        await client.query(
+            "BEGIN"
         );
 
 
-    return result.rows[0] || null;
-}
+        const existingResult =
+            await client.query(
+                `SELECT *
+                 FROM platform_admins
+                 WHERE id = $1
+                 FOR UPDATE`,
+                [
+                    adminId
+                ]
+            );
 
+
+        if (
+            existingResult.rowCount === 0
+        ) {
+
+            await client.query(
+                "ROLLBACK"
+            );
+
+            return null;
+        }
+
+
+        const existing =
+            existingResult.rows[0];
+
+
+        const result =
+            await client.query(
+                `UPDATE platform_admins
+                 SET
+                    is_active = false,
+                    updated_at = NOW()
+                 WHERE id = $1
+                 RETURNING
+                    id,
+                    display_name,
+                    email,
+                    is_active,
+                    twofa_enabled,
+                    last_login_at,
+                    created_at,
+                    updated_at`,
+                [
+                    adminId
+                ]
+            );
+
+
+        const row =
+            result.rows[0];
+
+
+        await audit.createAudit(
+            {
+                tenant_id:
+                    null,
+
+                parent_type:
+                    "platform_admin",
+
+                parent_id:
+                    adminId,
+
+                entity_type:
+                    "platform_admin",
+
+                entity_id:
+                    adminId,
+
+                action:
+                    "DEACTIVATE",
+
+                old_data:
+                    platformAdminSnapshot(
+                        existing
+                    ),
+
+                new_data:
+                    platformAdminSnapshot(
+                        row
+                    ),
+
+                changed_by:
+                    changedByAdminId
+            },
+            client
+        );
+
+
+        await client.query(
+            "COMMIT"
+        );
+
+
+        return row;
+
+
+    } catch (error) {
+
+        await client.query(
+            "ROLLBACK"
+        );
+
+        throw error;
+
+
+    } finally {
+
+        client.release();
+    }
+}
 
 // ---------------------------------
 // REACTIVATE PLATFORM ADMIN
 // ---------------------------------
 async function reactivatePlatformAdmin(
-    adminId
+    adminId,
+    changedByAdminId
 ) {
 
-    const result =
-        await authDb.query(
-            `UPDATE platform_admins
-             SET
-               is_active = true,
-               updated_at = NOW()
-             WHERE id = $1
-             RETURNING
-               id,
-               display_name,
-               email,
-               is_active,
-               twofa_enabled,
-               last_login_at,
-               created_at,
-               updated_at`,
-            [
-                adminId
-            ]
+    const client =
+        await authDb.connect();
+
+
+    try {
+
+        await client.query(
+            "BEGIN"
         );
 
 
-    return result.rows[0] || null;
+        const existingResult =
+            await client.query(
+                `SELECT *
+                 FROM platform_admins
+                 WHERE id = $1
+                 FOR UPDATE`,
+                [
+                    adminId
+                ]
+            );
+
+
+        if (
+            existingResult.rowCount === 0
+        ) {
+
+            await client.query(
+                "ROLLBACK"
+            );
+
+            return null;
+        }
+
+
+        const existing =
+            existingResult.rows[0];
+
+
+        const result =
+            await client.query(
+                `UPDATE platform_admins
+                 SET
+                    is_active = true,
+                    updated_at = NOW()
+                 WHERE id = $1
+                 RETURNING
+                    id,
+                    display_name,
+                    email,
+                    is_active,
+                    twofa_enabled,
+                    last_login_at,
+                    created_at,
+                    updated_at`,
+                [
+                    adminId
+                ]
+            );
+
+
+        const row =
+            result.rows[0];
+
+
+        await audit.createAudit(
+            {
+                tenant_id:
+                    null,
+
+                parent_type:
+                    "platform_admin",
+
+                parent_id:
+                    adminId,
+
+                entity_type:
+                    "platform_admin",
+
+                entity_id:
+                    adminId,
+
+                action:
+                    "REACTIVATE",
+
+                old_data:
+                    platformAdminSnapshot(
+                        existing
+                    ),
+
+                new_data:
+                    platformAdminSnapshot(
+                        row
+                    ),
+
+                changed_by:
+                    changedByAdminId
+            },
+            client
+        );
+
+
+        await client.query(
+            "COMMIT"
+        );
+
+
+        return row;
+
+
+    } catch (error) {
+
+        await client.query(
+            "ROLLBACK"
+        );
+
+        throw error;
+
+
+    } finally {
+
+        client.release();
+    }
 }
 
 // ---------------------------------
@@ -978,11 +1343,71 @@ async function getPlatformScreens() {
 }
 
 // ---------------------------------
+// PLATFORM ADMIN SECURITY SNAPSHOT
+// ---------------------------------
+
+async function getPlatformAdminSecuritySnapshot(
+    adminId,
+    client
+) {
+
+    const result =
+        await client.query(
+            `SELECT
+                s.code,
+                s.area,
+                s.name,
+                COALESCE(
+                    a.access_level,
+                    'NONE'
+                ) AS access_level
+             FROM platform_screens s
+             LEFT JOIN platform_admin_screen_access a
+               ON a.screen_id = s.id
+              AND a.admin_id = $1
+             WHERE s.is_active = true
+             ORDER BY
+                CASE s.area
+                    WHEN 'CPMSOFT' THEN 10
+                    WHEN 'Tenants' THEN 20
+                    ELSE 100
+                END,
+                s.area,
+                s.sort_order,
+                s.name`,
+            [
+                adminId
+            ]
+        );
+
+
+    return {
+        screen_access:
+            result.rows.map(
+                row => ({
+                    code:
+                        row.code,
+
+                    area:
+                        row.area,
+
+                    name:
+                        row.name,
+
+                    access_level:
+                        row.access_level
+                })
+            )
+    };
+}
+
+// ---------------------------------
 // UPDATE PLATFORM ADMIN SCREEN ACCESS
 // ---------------------------------
 async function updatePlatformAdminScreenAccess(
     adminId,
-    screens
+    screens,
+    changedByAdminId
 ) {
 
     const client =
@@ -1023,6 +1448,12 @@ async function updatePlatformAdminScreenAccess(
 
         const admin =
             adminResult.rows[0];
+
+        const oldSnapshot =
+            await getPlatformAdminSecuritySnapshot(
+                adminId,
+                client
+            );
 
 
         if (!admin) {
@@ -1154,6 +1585,44 @@ async function updatePlatformAdminScreenAccess(
             throw error;
         }
 
+        const newSnapshot =
+            await getPlatformAdminSecuritySnapshot(
+                adminId,
+                client
+            );
+
+
+        await audit.createAudit(
+            {
+                tenant_id:
+                    null,
+
+                parent_type:
+                    "platform_admin",
+
+                parent_id:
+                    adminId,
+
+                entity_type:
+                    "platform_admin_security",
+
+                entity_id:
+                    adminId,
+
+                action:
+                    "UPDATE",
+
+                old_data:
+                    oldSnapshot,
+
+                new_data:
+                    newSnapshot,
+
+                changed_by:
+                    changedByAdminId
+            },
+            client
+        );
 
         await client.query(
             "COMMIT"

@@ -134,7 +134,103 @@ const FIELD_DEFINITIONS = {
       label: "Resources",
       display: "longText"
     }
+  },
+
+  resource: {
+
+    resource_key: {
+      label: "Resource Key",
+      display: "text"
+    },
+
+    resource_name: {
+      label: "Resource Name",
+      display: "text"
+    },
+
+    category: {
+      label: "Category",
+      display: "text"
+    },
+
+    description: {
+      label: "Description",
+      display: "text"
+    },
+
+    display_order: {
+      label: "Display Order",
+      display: "text"
+    },
+
+    is_active: {
+      label: "Active",
+      display: "boolean"
+    }
+  },
+
+  package: {
+
+    package_key: {
+      label: "Package Key",
+      display: "text"
+    },
+
+    package_name: {
+      label: "Package Name",
+      display: "text"
+    },
+
+    description: {
+      label: "Description",
+      display: "text"
+    },
+
+    display_order: {
+      label: "Display Order",
+      display: "text"
+    },
+
+    is_active: {
+      label: "Active",
+      display: "boolean"
+    }
+  },
+
+  package_resources: {
+
+    resources: {
+      label: "Resources",
+      display: "longText"
+    }
+  },
+
+  platform_admin: {
+
+    display_name: {
+      label: "Display Name",
+      display: "text"
+    },
+
+    email: {
+      label: "Email",
+      display: "text"
+    },
+
+    is_active: {
+      label: "Active",
+      display: "boolean"
+    }
+  },
+
+  platform_admin_security: {
+
+    screen_access: {
+      label: "Screen Access",
+      display: "longText"
+    }
   }
+
 };
 
 // ==================================================
@@ -304,6 +400,195 @@ async function getTenantHistory(
 }
 
 // ==================================================
+// GET RESOURCE HISTORY
+// ==================================================
+
+async function getResourceHistory(
+  resourceId,
+  options = {}
+) {
+
+  const result =
+    await repository.getByParent(
+      null,
+      "resource",
+      resourceId,
+      {
+        page:
+          options.page,
+
+        pageSize:
+          options.pageSize,
+
+        entityType:
+          cleanEntityType(
+            options.entityType
+          ),
+
+        action:
+          cleanAction(
+            options.action
+          ),
+
+        userSearch:
+          String(
+            options.userSearch || ""
+          ).trim(),
+
+        dateFrom:
+          String(
+            options.dateFrom || ""
+          ).trim(),
+
+        dateTo:
+          String(
+            options.dateTo || ""
+          ).trim()
+      }
+    );
+
+
+  const items =
+    await Promise.all(
+      result.items.map(
+        prepareHistoryItem
+      )
+    );
+
+
+  return {
+    ...result,
+    items
+  };
+}
+
+// ==================================================
+// GET PACKAGE HISTORY
+// ==================================================
+
+async function getPackageHistory(
+  packageId,
+  options = {}
+) {
+
+  const result =
+    await repository.getByParent(
+      null,
+      "package",
+      packageId,
+      {
+        page:
+          options.page,
+
+        pageSize:
+          options.pageSize,
+
+        entityType:
+          cleanEntityType(
+            options.entityType
+          ),
+
+        action:
+          cleanAction(
+            options.action
+          ),
+
+        userSearch:
+          String(
+            options.userSearch || ""
+          ).trim(),
+
+        dateFrom:
+          String(
+            options.dateFrom || ""
+          ).trim(),
+
+        dateTo:
+          String(
+            options.dateTo || ""
+          ).trim()
+      }
+    );
+
+
+  const items =
+    await Promise.all(
+      result.items.map(
+        prepareHistoryItem
+      )
+    );
+
+
+  return {
+    ...result,
+    items
+  };
+}
+
+// ==================================================
+// GET PLATFORM ADMIN HISTORY
+// ==================================================
+
+async function getPlatformAdminHistory(
+  adminId,
+  options = {}
+) {
+
+  const result =
+    await repository.getByParent(
+      null,
+      "platform_admin",
+      adminId,
+      {
+        page:
+          options.page,
+
+        pageSize:
+          options.pageSize,
+
+        entityType:
+          cleanEntityType(
+            options.entityType
+          ),
+
+        action:
+          cleanAction(
+            options.action
+          ),
+
+        userSearch:
+          String(
+            options.userSearch || ""
+          ).trim(),
+
+        dateFrom:
+          String(
+            options.dateFrom || ""
+          ).trim(),
+
+        dateTo:
+          String(
+            options.dateTo || ""
+          ).trim()
+      }
+    );
+
+
+  const items =
+    await Promise.all(
+      result.items.map(
+        prepareHistoryItem
+      )
+    );
+
+
+  return {
+    ...result,
+    items
+  };
+}
+
+// ==================================================
 // PREPARE HISTORY ITEM
 // ==================================================
 
@@ -366,6 +651,76 @@ async function prepareHistoryItem(
       newData.resource_ids =
         await getResourceNames(
           newData.resource_ids
+        );
+    }
+  }
+
+  if (
+    item.entity_type ===
+    "package_resources"
+  ) {
+
+    if (
+      Array.isArray(
+        oldData.resources
+      )
+    ) {
+
+      oldData.resources =
+        oldData.resources.map(
+          resource =>
+            resource.resource_name ||
+            resource.resource_key ||
+            resource.resource_id
+        );
+    }
+
+
+    if (
+      Array.isArray(
+        newData.resources
+      )
+    ) {
+
+      newData.resources =
+        newData.resources.map(
+          resource =>
+            resource.resource_name ||
+            resource.resource_key ||
+            resource.resource_id
+        );
+    }
+  }
+
+    if (
+    item.entity_type ===
+    "platform_admin_security"
+  ) {
+
+    if (
+      Array.isArray(
+        oldData.screen_access
+      )
+    ) {
+
+      oldData.screen_access =
+        oldData.screen_access.map(
+          screen =>
+            `${screen.name || screen.code} — ${screen.access_level}`
+        );
+    }
+
+
+    if (
+      Array.isArray(
+        newData.screen_access
+      )
+    ) {
+
+      newData.screen_access =
+        newData.screen_access.map(
+          screen =>
+            `${screen.name || screen.code} — ${screen.access_level}`
         );
     }
   }
@@ -471,7 +826,7 @@ function buildFieldChanges(
     }
 
     if (
-      action === "UPDATE" &&
+      action !== "CREATE" &&
       valuesEqual(
         before,
         after
@@ -527,5 +882,8 @@ function valuesEqual(
 // ==================================================
 
 module.exports = {
+  getResourceHistory,
+  getPackageHistory,
+  getPlatformAdminHistory,
   getTenantHistory
 };

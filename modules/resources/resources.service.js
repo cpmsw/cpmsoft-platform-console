@@ -1,6 +1,8 @@
 const authDb =
   require("../../db/authDb");
 
+const audit =
+  require("../audit");
 
 // ---------------------------------
 // MASTER CPMSOFT RESOURCE CATALOG
@@ -384,123 +386,431 @@ async function getResourceById(id) {
 
 
 // ---------------------------------
+// RESOURCE AUDIT SNAPSHOT
+// ---------------------------------
+function resourceSnapshot(
+  row
+) {
+
+  if (!row) {
+    return null;
+  }
+
+  return {
+    resource_key:
+      row.resource_key,
+
+    resource_name:
+      row.resource_name,
+
+    category:
+      row.category,
+
+    description:
+      row.description,
+
+    display_order:
+      row.display_order,
+
+    is_active:
+      row.is_active
+  };
+}
+
+// ---------------------------------
 // CREATE RESOURCE
 // ---------------------------------
-async function createResource(data) {
+async function createResource(
+  data,
+  adminId
+) {
+
+  const client =
+    await authDb.connect();
+
   try {
-    const result = await authDb.query(
-      `INSERT INTO resources
-       (
-         resource_key,
-         resource_name,
-         display_name,
-         category,
-         description,
-         is_active,
-         display_order,
-         created_at,
-         updated_at
-       )
-       VALUES (
-         $1,
-         $2,
-         $3,
-         $4,
-         $5,
-         $6,
-         $7,
-         now(),
-         now()
-       )
-       RETURNING *`,
-      [
-        data.resource_key.trim(),
-        data.resource_name.trim(),
-        data.resource_name.trim(),
-        data.category?.trim() || null,
-        data.description?.trim() || null,
-        data.is_active ?? true,
-        data.display_order ?? 0
-      ]
+
+    await client.query(
+      "BEGIN"
     );
 
-    return result.rows[0];
 
-  } catch (error) {
-    if (error.code === "23505") {
-      const duplicate = new Error(
-        "Resource key already exists."
+    const result =
+      await client.query(
+        `INSERT INTO resources
+         (
+           resource_key,
+           resource_name,
+           display_name,
+           category,
+           description,
+           is_active,
+           display_order,
+           created_at,
+           updated_at
+         )
+         VALUES (
+           $1,
+           $2,
+           $3,
+           $4,
+           $5,
+           $6,
+           $7,
+           now(),
+           now()
+         )
+         RETURNING *`,
+        [
+          data.resource_key.trim(),
+          data.resource_name.trim(),
+          data.resource_name.trim(),
+          data.category?.trim() || null,
+          data.description?.trim() || null,
+          data.is_active ?? true,
+          data.display_order ?? 0
+        ]
       );
 
+
+    const row =
+      result.rows[0];
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          null,
+
+        parent_type:
+          "resource",
+
+        parent_id:
+          row.id,
+
+        entity_type:
+          "resource",
+
+        entity_id:
+          row.id,
+
+        action:
+          "CREATE",
+
+        old_data:
+          null,
+
+        new_data:
+          resourceSnapshot(
+            row
+          ),
+
+        changed_by:
+          adminId
+      },
+      client
+    );
+
+
+    await client.query(
+      "COMMIT"
+    );
+
+
+    return row;
+
+  } catch (error) {
+
+    await client.query(
+      "ROLLBACK"
+    );
+
+
+    if (
+      error.code ===
+      "23505"
+    ) {
+
+      const duplicate =
+        new Error(
+          "Resource key already exists."
+        );
+
       duplicate.statusCode = 409;
-      duplicate.code = "RESOURCE_KEY_EXISTS";
+      duplicate.code =
+        "RESOURCE_KEY_EXISTS";
 
       throw duplicate;
     }
 
+
     throw error;
+
+  } finally {
+
+    client.release();
   }
 }
-
 
 // ---------------------------------
 // UPDATE RESOURCE
 // ---------------------------------
-async function updateResource(id, data) {
-  const result = await authDb.query(
-    `UPDATE resources
-     SET resource_name = $2,
-         display_name = $2,
-         category = $3,
-         description = $4,
-         display_order = $5,
-         updated_at = now()
-     WHERE id = $1
-     RETURNING *`,
-    [
-      id,
-      data.resource_name.trim(),
-      data.category?.trim() || null,
-      data.description?.trim() || null,
-      data.display_order ?? 0
-    ]
-  );
+async function updateResource(
+  id,
+  data,
+  adminId
+) {
 
-  if (result.rowCount === 0) {
-    const error = new Error(
-      "Resource not found."
+  const client =
+    await authDb.connect();
+
+  try {
+
+    await client.query(
+      "BEGIN"
     );
 
-    error.statusCode = 404;
-    error.code = "RESOURCE_NOT_FOUND";
+
+    const existingResult =
+      await client.query(
+        `SELECT *
+         FROM resources
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+
+
+    if (
+      existingResult.rowCount === 0
+    ) {
+
+      const error =
+        new Error(
+          "Resource not found."
+        );
+
+      error.statusCode = 404;
+      error.code =
+        "RESOURCE_NOT_FOUND";
+
+      throw error;
+    }
+
+
+    const existing =
+      existingResult.rows[0];
+
+
+    const result =
+      await client.query(
+        `UPDATE resources
+         SET resource_name = $2,
+             display_name = $2,
+             category = $3,
+             description = $4,
+             display_order = $5,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          id,
+          data.resource_name.trim(),
+          data.category?.trim() || null,
+          data.description?.trim() || null,
+          data.display_order ?? 0
+        ]
+      );
+
+
+    const row =
+      result.rows[0];
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          null,
+
+        parent_type:
+          "resource",
+
+        parent_id:
+          id,
+
+        entity_type:
+          "resource",
+
+        entity_id:
+          id,
+
+        action:
+          "UPDATE",
+
+        old_data:
+          resourceSnapshot(
+            existing
+          ),
+
+        new_data:
+          resourceSnapshot(
+            row
+          ),
+
+        changed_by:
+          adminId
+      },
+      client
+    );
+
+
+    await client.query(
+      "COMMIT"
+    );
+
+
+    return row;
+
+  } catch (error) {
+
+    await client.query(
+      "ROLLBACK"
+    );
 
     throw error;
-  }
 
-  return result.rows[0];
+  } finally {
+
+    client.release();
+  }
 }
 
 // ---------------------------------
 // ACTIVATE / DEACTIVATE RESOURCE
 // ---------------------------------
-async function setResourceActive(id, isActive) {
-  const result = await authDb.query(
-    `UPDATE resources
-     SET is_active = $2,
-         updated_at = now()
-     WHERE id = $1
-     RETURNING *`,
-    [id, isActive]
-  );
+async function setResourceActive(
+  id,
+  isActive,
+  adminId
+) {
 
-  if (result.rowCount === 0) {
-    const error = new Error("Resource not found.");
-    error.statusCode = 404;
-    error.code = "RESOURCE_NOT_FOUND";
+  const client =
+    await authDb.connect();
+
+  try {
+
+    await client.query(
+      "BEGIN"
+    );
+
+
+    const existingResult =
+      await client.query(
+        `SELECT *
+         FROM resources
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+
+
+    if (
+      existingResult.rowCount === 0
+    ) {
+
+      const error =
+        new Error(
+          "Resource not found."
+        );
+
+      error.statusCode = 404;
+      error.code =
+        "RESOURCE_NOT_FOUND";
+
+      throw error;
+    }
+
+
+    const existing =
+      existingResult.rows[0];
+
+
+    const result =
+      await client.query(
+        `UPDATE resources
+         SET is_active = $2,
+             updated_at = now()
+         WHERE id = $1
+         RETURNING *`,
+        [
+          id,
+          isActive
+        ]
+      );
+
+
+    const row =
+      result.rows[0];
+
+
+    await audit.createAudit(
+      {
+        tenant_id:
+          null,
+
+        parent_type:
+          "resource",
+
+        parent_id:
+          id,
+
+        entity_type:
+          "resource",
+
+        entity_id:
+          id,
+
+        action:
+          isActive
+            ? "REACTIVATE"
+            : "DEACTIVATE",
+
+        old_data:
+          resourceSnapshot(
+            existing
+          ),
+
+        new_data:
+          resourceSnapshot(
+            row
+          ),
+
+        changed_by:
+          adminId
+      },
+      client
+    );
+
+
+    await client.query(
+      "COMMIT"
+    );
+
+
+    return row;
+
+  } catch (error) {
+
+    await client.query(
+      "ROLLBACK"
+    );
+
     throw error;
-  }
 
-  return result.rows[0];
+  } finally {
+
+    client.release();
+  }
 }
 
 module.exports = {

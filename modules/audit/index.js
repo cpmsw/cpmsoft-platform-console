@@ -9,5 +9,14 @@ module.exports = {
     repository.createAudit,
 
   getTenantHistory:
-    service.getTenantHistory
+    service.getTenantHistory,
+
+  getResourceHistory:
+    service.getResourceHistory,
+
+  getPackageHistory:
+    service.getPackageHistory,
+
+  getPlatformAdminHistory:
+    service.getPlatformAdminHistory
 };
