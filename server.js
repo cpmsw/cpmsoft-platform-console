@@ -1,4 +1,8 @@
-const fastify = require("fastify")({ logger: true });
+const fastify =
+  require("fastify")({
+    logger: true,
+    trustProxy: true
+  });
 const cors = require("@fastify/cors");
 const swagger = require("@fastify/swagger");
 const swaggerUi = require("@fastify/swagger-ui");
@@ -7,6 +11,7 @@ const path = require("path");
 const AutoLoad = require("@fastify/autoload");
 const cookie = require("@fastify/cookie");
 const jwt = require("@fastify/jwt");
+const rateLimit = require("@fastify/rate-limit");
 
 
 // ---------------------------------
@@ -73,6 +78,14 @@ fastify.register(cors, {
   allowedHeaders: [
     "Content-Type"
   ]
+});
+
+
+// ---------------------------------
+// RATE LIMITING
+// ---------------------------------
+fastify.register(rateLimit, {
+  global: false
 });
 
 
@@ -282,7 +295,8 @@ fastify.register(AutoLoad, {
 // ---------------------------------
 const start = async () => {
   const requiredEnv = [
-    "DB_PASSWORD"
+    "DB_PASSWORD",
+    "PLATFORM_JWT_SECRET"
   ];
 
   const missing = requiredEnv.filter(

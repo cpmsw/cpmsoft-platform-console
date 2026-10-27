@@ -42,6 +42,13 @@ module.exports =
     fastify.post(
       "/login",
       {
+        config: {
+          rateLimit: {
+            max: 10,
+            timeWindow: "15 minutes"
+          }
+        },
+
         schema: {
           tags: ["Authentication"],
           summary:
@@ -363,6 +370,13 @@ module.exports =
     fastify.post(
       "/2fa/verify",
       {
+        config: {
+          rateLimit: {
+            max: 10,
+            timeWindow: "10 minutes"
+          }
+        },
+
         schema: {
           tags: ["Authentication"],
           summary:
@@ -1009,6 +1023,13 @@ module.exports =
     fastify.post(
       "/send-reset-code",
       {
+        config: {
+          rateLimit: {
+            max: 5,
+            timeWindow: "15 minutes"
+          }
+        },
+
         schema: {
           summary:
             "Send Platform administrator password reset code",
@@ -1060,10 +1081,12 @@ module.exports =
 
 
           const resetCode =
-            Math.floor(
-              100000 +
-              Math.random() * 900000
-            ).toString();
+            crypto
+              .randomInt(
+                100000,
+                1000000
+              )
+              .toString();
 
 
           const expires =
@@ -1074,9 +1097,15 @@ module.exports =
           );
 
 
+          const resetCodeHash =
+            crypto
+              .createHash("sha256")
+              .update(resetCode)
+              .digest("hex");
+
           await service.setPasswordResetCode(
             admin.id,
-            resetCode,
+            resetCodeHash,
             expires
           );
           await sendEmail({
@@ -1124,6 +1153,13 @@ module.exports =
     fastify.post(
       "/reset-password-code",
       {
+        config: {
+          rateLimit: {
+            max: 5,
+            timeWindow: "10 minutes"
+          }
+        },
+
         schema: {
           summary:
             "Reset Platform administrator password using code",
@@ -1213,9 +1249,15 @@ module.exports =
           }
 
 
+          const resetCodeHash =
+            crypto
+              .createHash("sha256")
+              .update(code)
+              .digest("hex");
+
           if (
             !admin.reset_code ||
-            admin.reset_code !== code
+            admin.reset_code !== resetCodeHash
           ) {
             return reply
               .code(400)
